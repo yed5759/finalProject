@@ -12,8 +12,9 @@ give a timestamp for every audio.
 """
 def download_audio(url):
     cache = Cache(CACHE_DIR)
+    cache.expired()
     ydl_opts = {
-        "format": "bestaudio/best",
+        "format": "bestaudio",
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -21,20 +22,18 @@ def download_audio(url):
                 "preferredquality": "192",
             }
         ],
-        "outtmpl": "./cache/%(title)s.%(ext)s",
+        "outtmpl": "./cache/%(title)s.mp3",
         "download_archive": ARCHIVE_FILE,
         "quiet": True,
     }
     try:
         data = cache.load()
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url)
-
-            if not info['id'] in data:
-                ydl.download([url])
-
+            info = ydl.extract_info(url, download=True)
+            final_file = f'./cache/{info["title"]}.mp3'
             data[info['id']] = {"last access": time.asctime(time.gmtime())}
             cache.save(data)
+            return final_file
 
     except Exception as e:
         print(f"Error downloading audio: {e}")
