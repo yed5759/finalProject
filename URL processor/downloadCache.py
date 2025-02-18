@@ -29,6 +29,7 @@ class Cache:
                 time.strptime(load[audio_id]["last access"], "%a %b %d %H:%M:%S %Y")) >= 3 * 24 * 60 * 60]
 
         for audio_id in expired:
+            os.remove(load[audio_id]['filepath'])
             del load[audio_id]
 
         self.save(load)

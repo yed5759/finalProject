@@ -31,7 +31,8 @@ def download_audio(url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             final_file = f'./cache/{info["title"]}.mp3'
-            data[info['id']] = {"last access": time.asctime(time.gmtime())}
+            data[info['id']] = { "filename": info['filepath'],
+                                "last access": time.asctime(time.gmtime())}
             cache.save(data)
             return final_file
 
