@@ -1,6 +1,5 @@
 import "./login.css"
 import Image from "next/image"
-import notes from "../../public/notes.png"
 
 export default function Login() {
   return (
@@ -12,7 +11,7 @@ export default function Login() {
         <div className="container text-center overflow-hidden pt-lg-5">
           <div className="row d-flex align-items-stretch h-100">
             <div className="col">
-              <Image src={notes} alt="notes" width={900} height={70} id="picture"/>
+              <Image src="/notes.png" alt="Notes" width={300} height={200} id="picture" />
             </div>
             <div className="col d-flex justify-content-center">
               <form className="w-50">
