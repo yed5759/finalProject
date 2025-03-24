@@ -25,3 +25,10 @@
 .button {
     width: 200px;
 }
+h1 {
+    font-family: 'Italianno', cursive;
+    font-size: 3rem;
+    font-weight: 400;
+    text-align: center;
+    line-height: 1.4;
+}
