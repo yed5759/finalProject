@@ -9,6 +9,10 @@ export default function Home() {
         const loginUrl = "https://us-east-1ipj0spljz.auth.us-east-1.amazoncognito.com/login?client_id=1idr7soeln9lbch139sr9bmn8v&redirect_uri=https://d84l1y8p4kdic.cloudfront.net&response_type=code&scope=email+openid+phone"
         router.push(loginUrl)
     }
+    const register = () => {
+        const Url = "https://us-east-1ipj0spljz.auth.us-east-1.amazoncognito.com/signup?client_id=1idr7soeln9lbch139sr9bmn8v&redirect_uri=https%3A%2F%2Fd84l1y8p4kdic.cloudfront.net&response_type=code&scope=email+openid+phone"
+        router.push(Url)
+    }
   return (
       <div>
           <link href="https://fonts.googleapis.com/css2?family=Italianno&display=swap" rel="stylesheet"/>
@@ -32,7 +36,7 @@ export default function Home() {
               <div className="d-flex flex-column align-items-center justify-content-center mt-sm-5">
                   <h5>New User?</h5>
                   <p><small>Sign up and start using Taking Notes</small></p>
-                  <button type="button" className="btn btn-dark button">Sign Up</button>
+                  <button type="button" className="btn btn-dark button" onClick={register}>Sign Up</button>
               </div>
           </div>
       </div>
