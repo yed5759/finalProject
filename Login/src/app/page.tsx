@@ -1,7 +1,14 @@
+'use client';
 import "./login.css"
 import Image from "next/image"
+import {useRouter} from 'next/navigation'
 
 export default function Home() {
+    const router = useRouter()
+    const login = () => {
+        const loginUrl = "https://us-east-1ipj0spljz.auth.us-east-1.amazoncognito.com/login?client_id=1idr7soeln9lbch139sr9bmn8v&redirect_uri=https://d84l1y8p4kdic.cloudfront.net&response_type=code&scope=email+openid+phone"
+        router.push(loginUrl)
+    }
   return (
       <div>
           <link href="https://fonts.googleapis.com/css2?family=Italianno&display=swap" rel="stylesheet"/>
@@ -17,7 +24,7 @@ export default function Home() {
                   <div className="col d-flex justify-content-center flex-column align-items-center text-center mb-1">
                       <h1><big>Generate Notes with Taking Notes</big></h1>
                       <h2>start now!</h2>
-                      <button type="button" className="btn btn-dark button mt-3">Log in</button>
+                      <button type="button" className="btn btn-dark button mt-3" onClick={login}>Log in</button>
                   </div>
               </div>
           </div>
