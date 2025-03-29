@@ -3,7 +3,7 @@ import "./login.css"
 import Image from "next/image"
 import {useRouter} from 'next/navigation'
 
-export default function Home() {
+export default function LandingPage() {
     const router = useRouter()
     const login = () => {
         const loginUrl = "https://us-east-1ipj0spljz.auth.us-east-1.amazoncognito.com/login?client_id=1idr7soeln9lbch139sr9bmn8v&redirect_uri=https://d84l1y8p4kdic.cloudfront.net&response_type=code&scope=email+openid+phone"
