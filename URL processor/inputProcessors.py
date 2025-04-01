@@ -34,31 +34,36 @@ def download_audio(url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             name = sanitize_filename(f'{info["title"]}.mp3')
-        response = table.get_item(Key={'Song Name': name})
+        song_key = os.path.basename(name)
+        response = table.get_item(Key={'Song Name': song_key})
 
         # check if the file already in s3
         if 'Item' in response:
             new_expire_time = int(time.time()) + (10 * 24 * 60 * 60)
-            table.update_item(Key={'Song Name': name}, UpdateExpression="SET #expire = :expire_time",
+            table.update_item(Key={'Song Name': song_key}, UpdateExpression="SET #expire = :expire_time",
                               ExpressionAttributeNames={'#expire': 'expire time'},
                               ExpressionAttributeValues={':expire_time': new_expire_time},
                               ReturnValues="UPDATED_NEW")
-            return name
+            s3.copy_object(Bucket="songscache",
+                           CopySource={'Bucket': 'songscache', 'Key': f"upload/{song_key}"},
+                           Key=f"uploads/{song_key}")
+            local_file = f"/tmp/{song_key}" if os.name != 'nt' else f"temp\\{song_key}"
+            s3.download_file("songscache", f"upload/{song_key}", local_file)
+            return local_file
 
-         # download file
+        # download file
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-            info = ydl.extract_info(url, download=False)
+            info = ydl.extract_info(url, download=True)
             name = info['requested_downloads'][0]['filepath']
 
         if not os.path.isfile(name):
             raise FileNotFoundError(f"File not found: {name}")
 
         with open(name, "rb") as file_data:
-            s3.upload_fileobj(file_data, 'songcache', name)
+            s3.upload_fileobj(file_data, 'songscache', f"uploads/{os.path.basename(name)}")
 
         table.put_item(Item={
-            'Song Name': name,
+            'Song Name': os.path.basename(name),
             'Song URL': url,
             'expire time': int(time.time()) + (10 * 24 * 60 * 60)
         })
