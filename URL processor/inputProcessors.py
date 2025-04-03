@@ -26,7 +26,7 @@ def download_audio(url):
                 "preferredquality": "192",
             }
         ],
-        "outtmpl": "%(title)s.%(ext)s",
+        "outtmpl": "../temp/%(title)s.%(ext)s",
         "quiet": True,
     }
     try:
@@ -47,7 +47,7 @@ def download_audio(url):
             s3.copy_object(Bucket="songscache",
                            CopySource={'Bucket': 'songscache', 'Key': f"upload/{song_key}"},
                            Key=f"uploads/{song_key}")
-            local_file = f"/tmp/{song_key}" if os.name != 'nt' else f"temp\\{song_key}"
+            local_file = f"../temp/{song_key}"
             s3.download_file("songscache", f"upload/{song_key}", local_file)
             return local_file
 
@@ -67,7 +67,6 @@ def download_audio(url):
             'Song URL': url,
             'expire time': int(time.time()) + (10 * 24 * 60 * 60)
         })
-        os.remove(name)
         return name
 
     except Exception as e:
