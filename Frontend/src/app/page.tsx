@@ -1,5 +1,5 @@
 'use client';
-import "./landing.css"
+import "../styles/landing.css"
 import Image from "next/image"
 import {useRouter} from 'next/navigation'
 
