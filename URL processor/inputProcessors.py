@@ -1,18 +1,22 @@
-import yt_dlp
-import time
 import os
-from downloadCache import Cache
+import re
+import time
 
-CACHE_DIR = "./cache"
-ARCHIVE_FILE = os.path.join(CACHE_DIR, "downloads.txt")
+from dotenv import load_dotenv
+import yt_dlp
+import boto3
 
 """
 handle downloading of the audio from youtube if not already downloaded.
 give a timestamp for every audio.
 """
+load_dotenv()
+s3 = boto3.client('s3')
+dynamodb = boto3.resource('dynamodb', region_name='eu-north-1')
+table = dynamodb.Table('SongsMetadata')
+
+
 def download_audio(url):
-    cache = Cache(CACHE_DIR)
-    cache.expired()
     ydl_opts = {
         "format": "bestaudio",
         "postprocessors": [
@@ -22,19 +26,52 @@ def download_audio(url):
                 "preferredquality": "192",
             }
         ],
-        "outtmpl": "./cache/%(title)s.mp3",
-        "download_archive": ARCHIVE_FILE,
+        "outtmpl": "../temp/%(title)s.%(ext)s",
         "quiet": True,
     }
     try:
-        data = cache.load()
+        # download metadata
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            name = sanitize_filename(f'{info["title"]}.mp3')
+        song_key = os.path.basename(name)
+        response = table.get_item(Key={'Song Name': song_key})
+
+        # check if the file already in s3
+        if 'Item' in response:
+            new_expire_time = int(time.time()) + (10 * 24 * 60 * 60)
+            table.update_item(Key={'Song Name': song_key}, UpdateExpression="SET #expire = :expire_time",
+                              ExpressionAttributeNames={'#expire': 'expire time'},
+                              ExpressionAttributeValues={':expire_time': new_expire_time},
+                              ReturnValues="UPDATED_NEW")
+            s3.copy_object(Bucket="songscache",
+                           CopySource={'Bucket': 'songscache', 'Key': f"upload/{song_key}"},
+                           Key=f"uploads/{song_key}")
+            local_file = f"../temp/{song_key}"
+            s3.download_file("songscache", f"upload/{song_key}", local_file)
+            return local_file
+
+        # download file
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            final_file = f'./cache/{info["title"]}.mp3'
-            data[info['id']] = { "filename": info['filepath'],
-                                "last access": time.asctime(time.gmtime())}
-            cache.save(data)
-            return final_file
+            name = info['requested_downloads'][0]['filepath']
+
+        if not os.path.isfile(name):
+            raise FileNotFoundError(f"File not found: {name}")
+
+        with open(name, "rb") as file_data:
+            s3.upload_fileobj(file_data, 'songscache', f"uploads/{os.path.basename(name)}")
+
+        table.put_item(Item={
+            'Song Name': os.path.basename(name),
+            'Song URL': url,
+            'expire time': int(time.time()) + (10 * 24 * 60 * 60)
+        })
+        return name
 
     except Exception as e:
         print(f"Error downloading audio: {e}")
+
+
+def sanitize_filename(filename):
+    return re.sub(r'[\\/*?:"<>|]', '_', filename)
