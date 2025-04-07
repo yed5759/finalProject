@@ -10,6 +10,7 @@ const Page = () => {
   useEffect(() => {
     // Here, we're checking if the user is authenticated, using a token or any other authentication mechanism
     const token = localStorage.getItem('accessToken'); // Replace with your token check
+    console.log('🟢 [page.tsx] token =', token);
     if (token) {
       setIsAuthenticated(true);
     } else {
@@ -18,9 +19,12 @@ const Page = () => {
   }, []);
 
   useEffect(() => {
+    console.log('🟠 [page.tsx] isAuthenticated =', isAuthenticated);
     if (isAuthenticated === true) {
+      console.log('➡️ [page.tsx] redirecting to /home');
       router.push('/home'); // Navigate to the home page if the user is authenticated
     } else if (isAuthenticated === false) {
+      console.log('➡️ [page.tsx] redirecting to /landing');
       router.push('/landing'); // Navigate to the landing page if the user is not authenticated
     }
   }, [isAuthenticated, router]);

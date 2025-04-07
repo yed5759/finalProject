@@ -8,30 +8,32 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   useEffect(() => {
-    const token = localStorage.getItem("accessToken");
-    console.log("Token found:", token);
-    setIsAuthenticated(!!token);
-  }, []);
-
-  useEffect(() => {
-    // If no user is authenticated and we're not on the /landing route, redirect to /landing
-    if (isAuthenticated === false && pathname !== '/landing') {
-      router.push("/landing");
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("accessToken");
+      console.log("[AuthWrapper] Token found:", token);
+      setIsAuthenticated(!!token);  // Update the authentication status based on the token
     }
-  }, [isAuthenticated, router, pathname]);
+  }, []);  // This effect runs only once when the component mounts
+
+  // After isAuthenticated changes, we perform the necessary redirection
+  useEffect(() => {
+    console.log("[AuthWrapper] isAuthenticated:", isAuthenticated);
+    console.log("[AuthWrapper] pathname:", pathname);
+
+    // If the user is not authenticated and we're not on the landing page, redirect to landing
+    if (isAuthenticated === false && pathname !== '/landing') {
+      console.log("[AuthWrapper] Redirecting to /landing");
+      router.push("/landing");
+    } 
+    // If the user is authenticated and we're on the landing page, redirect to /home
+    else if (isAuthenticated === true && pathname === '/landing') {
+      console.log("[AuthWrapper] Redirecting to /home");
+      router.push("/home");
+    }
+  }, [isAuthenticated, pathname, router]);  // This effect runs when isAuthenticated or pathname changes
 
   if (isAuthenticated === null) {
-    return <div>Loading...</div>;
-  }
-
-  // If user is not authenticated but on the landing page, render the children to show the landing page
-  if (!isAuthenticated && pathname === '/landing') {
-    return <>{children}</>;
-  }
-
-  // If not authenticated and not on the landing route, render nothing — redirection has already been made
-  if (!isAuthenticated) {
-    return null;
+    return <div>Loading...</div>;  // Show a loading state until the authentication status is determined
   }
 
   return <>{children}</>;
