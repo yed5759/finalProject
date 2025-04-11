@@ -20,3 +20,8 @@ body {
   align-items: flex-start;
   color: black;
 }
+
+body, html {
+  margin: 0;
+  padding: 0;
+}

@@ -24,7 +24,7 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
     if (isAuthenticated === false && pathname !== '/landing') {
       console.log("[AuthWrapper] Redirecting to /landing");
       router.push("/landing");
-    } 
+    }
     // If the user is authenticated and we're on the landing page, redirect to /home
     else if (isAuthenticated === true && pathname === '/landing') {
       console.log("[AuthWrapper] Redirecting to /home");
