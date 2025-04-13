@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import subprocess
 
 from dotenv import load_dotenv
 import yt_dlp
@@ -10,7 +11,15 @@ import boto3
 handle downloading of the audio from youtube if not already downloaded.
 give a timestamp for every audio.
 """
+subprocess.run([
+    "openssl", "enc", "-aes-256-cbc", "-d",
+    "-in", ".env.enc", "-out", ".env",
+    "-pass", "file:../secret.key"
+], check=True)
+
 load_dotenv()
+os.remove("../.env.enc")
+
 s3 = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb', region_name='eu-north-1')
 table = dynamodb.Table('SongsMetadata')
@@ -47,7 +56,7 @@ def download_audio(url):
             s3.copy_object(Bucket="songscache",
                            CopySource={'Bucket': 'songscache', 'Key': f"upload/{song_key}"},
                            Key=f"uploads/{song_key}")
-            local_file = f"../temp/{song_key}"
+            local_file = f"../Backend/temp/{song_key}"
             s3.download_file("songscache", f"upload/{song_key}", local_file)
             return local_file
 
