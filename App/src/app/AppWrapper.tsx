@@ -18,7 +18,4 @@ export const AppWrapper = ({ children }: PropsWithChildren) => {
             </main>
         </div>
     )
-
-
-
 }

@@ -100,6 +100,7 @@ export default function HomePage() {
           style={{ display: 'flex', justifyContent: 'center' }}
         >
           Copy and paste the URL for the content in the format: https://www.example.com/video
+          {/* פנייה לשרת להוסיף */}
         </p>
 
         <div className="space-y-4 p-1"
@@ -113,6 +114,7 @@ export default function HomePage() {
           />
           <div className="flex justify-end">
             <Button onClick={handleSubmitUrl}>I've Picked a Video!!</Button>
+            {/* פנייה לשרת להוסיף */}
           </div>
         </div>
       </div>
