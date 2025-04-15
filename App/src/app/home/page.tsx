@@ -1,3 +1,5 @@
+// src/app/landing/home.tsx
+
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
@@ -6,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload } from "lucide-react";
 // import Navbar from '@/components/Navbar';
+
+
 
 export default function HomePage() {
   const searchParams = useSearchParams();

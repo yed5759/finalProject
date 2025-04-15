@@ -1,3 +1,4 @@
+// src/app/landing/page.tsx
 'use client';
 import "../../styles/landing.css"
 import Image from "next/image"

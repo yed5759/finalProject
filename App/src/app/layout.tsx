@@ -5,6 +5,8 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import AuthWrapper from './AuthWrapper';
 import { AppWrapper } from "./AppWrapper";
 
+// import { Authenticator } from "@aws-amplify/ui-react";
+// import "@aws-amplify/ui-react/styles.css";
 import { setupAmplify } from "@/utils/cognito";
 
 // Load fonts in module scope
@@ -30,6 +32,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <html lang="en" className={fontsClassName}>
       <body>
         <AppWrapper>
+          {/* <Authenticator>{children}</Authenticator> */}
+
           <AuthWrapper>{children}</AuthWrapper>
         </AppWrapper>
       </body>
