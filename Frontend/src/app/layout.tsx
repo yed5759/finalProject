@@ -18,20 +18,36 @@ export default function Layout({children}: { children: React.ReactNode }) {
     return (
         <html lang="en">
         <body>
-        <div className="fixed top-0 left-0 h-screen w-[120px] z-[-1] pointer-events-none flex items-start">
+        <div style={{
+            position: "fixed",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            width: "60px",
+            zIndex: 0,
+            pointerEvents: "none",
+        }}>
             <Image
                 src="/left.png"
                 alt="left decoration"
                 fill
-                style={{ objectFit: 'contain', objectPosition: 'top left'}}
+                style={{ objectFit: 'cover', objectPosition: 'top left'}}
             />
         </div>
-        <div className="fixed top-0 right-0 h-screen w-[120px] z-[-1] pointer-events-none flex items-start">
+        <div style={{
+            position: "fixed",
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: "60px",
+            zIndex: 0,
+            pointerEvents: "none"
+        }}>
             <Image
                 src="/right.png"
                 alt="right decoration"
                 fill
-                style={{ objectFit: 'contain', objectPosition: 'top right' }}
+                style={{ objectFit: 'cover', objectPosition: 'top right' }}
             />
         </div>
         <AppWrapper>
