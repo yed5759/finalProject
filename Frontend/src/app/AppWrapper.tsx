@@ -3,12 +3,10 @@ import type { PropsWithChildren } from "react";
 
 import Navbar from "@/components/Navbar";
 import { usePathname } from "next/navigation";
-import AuthWrapper from "./AuthWrapper";
 
-export const AppWrapper = ({ children }: PropsWithChildren) => {
-
+export default function AppWrapper({ children }: PropsWithChildren) {
     const pathname = usePathname();
-    const showNavbar = pathname !== '/landing';
+    const showNavbar = pathname !== '/';
 
     return (
         <div className="flex" style={{ width: "100%" }}>
@@ -17,5 +15,5 @@ export const AppWrapper = ({ children }: PropsWithChildren) => {
                 {children}
             </main>
         </div>
-    )
+    );
 }
