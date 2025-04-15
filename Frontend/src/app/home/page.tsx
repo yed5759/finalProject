@@ -1,7 +1,7 @@
 'use client';
 
-import React, {useEffect} from 'react';
-import {useSearchParams} from 'next/navigation';
+import React, { useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 export default function HomePage() {
     const searchParams = useSearchParams();
@@ -38,7 +38,7 @@ export default function HomePage() {
 
     return (
         <div>
-            <div className="d-flex justify-content-center align-items-center ps-1" style={{"margin-top": "25vh"}}>
+            <div className="d-flex justify-content-center align-items-center ps-1" style={{ "marginTop": "25vh" }}>
                 <div className="text-center">
                     <h2 className="fw-bold">Turn your music into sheet notes</h2>
                     <p className="lead"> upload a file or paste a link to get started!</p>
@@ -49,7 +49,7 @@ export default function HomePage() {
                     <h3 className="font-monospace m-3">Upload music file</h3>
                     <form className="d-flex flex-column align-items-center mb-3" id="file-form">
                         <label htmlFor="upload">please choose a song</label>
-                        <input type="file" className="form-control w-75" id="upload" name="file"/>
+                        <input type="file" className="form-control w-75" id="upload" name="file" />
                     </form>
                 </div>
                 <div className="container text-center border border-1 border-black border-opacity-25 h-auto">
@@ -57,7 +57,7 @@ export default function HomePage() {
                     <form className="d-flex flex-column align-items-center mb-3" id="URL-form">
                         <label htmlFor="url">Please enter the URL for the song you picked:</label>
                         <input type="url" className="form-control w-75" id="url" name="url"
-                               placeholder="https://www.youtube.com/watch?v=fake1234abcd"/>
+                            placeholder="https://www.youtube.com/watch?v=fake1234abcd" />
                     </form>
                 </div>
             </div>
