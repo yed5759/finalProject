@@ -7,17 +7,18 @@ import {
 import { Amplify } from 'aws-amplify';
 import API from 'aws-amplify/api';
 
-// src/utils/cognito.ts
-
+// Setup Amplify with environment variables
 export function setupAmplify() {
-
   const {
     USER_POOL_ID: userPoolId,
     USER_POOL_CLIENT_ID: userPoolClientId,
     IDENTITY_POOL_ID: identityPoolId
   } = process.env
 
-  if (!(userPoolId && userPoolClientId && identityPoolId)) throw new Error('invalid ENV');
+  if (!(userPoolId && userPoolClientId && identityPoolId)) {
+    throw new Error('invalid ENV');
+  }
+
   Amplify.configure({
     Auth: {
       Cognito: {
@@ -47,7 +48,6 @@ export function setupAmplify() {
 
 }
 
-API.post({ apiName: 'api', path: '/x/y', options: {} })
 const poolData = {
   UserPoolId: 'us-east-1_IPJ0SpljZ', // מזהה ה־User Pool שלך
   ClientId: '1idr7soeln9lbch139sr9bmn8v', // מזהה ה־App client שלך
@@ -55,6 +55,7 @@ const poolData = {
 
 const userPool = new CognitoUserPool(poolData);
 
+// Sign in function
 export const signIn = (username: string, password: string) => {
   const userData = {
     Username: username,
@@ -84,3 +85,7 @@ export const signIn = (username: string, password: string) => {
     });
   });
 };
+
+export function cn(...inputs: (string | false | null | undefined)[]): string {
+  return inputs.filter(Boolean).join(" ");
+}
