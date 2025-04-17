@@ -13,19 +13,33 @@ import { Upload } from "lucide-react";
 
 export default function HomePage() {
   const searchParams = useSearchParams();
-  const code = searchParams.get('code');
+
   const [url, setUrl] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    console.log('🔵 [home] code from URL =', code);
+    const code = searchParams.get("code")
     if (code) {
-      // נניח שבשלב זה נשלוף טוקן כלשהו
-      localStorage.setItem('accessToken', 'mock_token'); // החלפה אמיתית בהמשך
-      console.log('🧩 [home] saved mock accessToken');
+      // Send code to Flask
+      fetch("http://localhost:5000/auth/callback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ code })
+      })
+        .then(res => res.json())
+        .then(data => {
+          console.log("✅ Tokens from Flask:", data)
+          // You can store tokens in cookie or context here
+        })
+        .catch(err => {
+          console.error("❌ Error sending code to Flask:", err)
+        })
     }
-  }, [code]);
+  }, [searchParams])
+
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files ? event.target.files[0] : null;
@@ -52,10 +66,6 @@ export default function HomePage() {
       className="w-50"
       style={{ display: 'flex', justifyContent: 'center' }}
     >
-      <div>
-        <h1>Home Page</h1>
-        <p>code from URL: {code}</p>
-      </div>
       {/* אזור העלאת קובץ */}
       <div className="border border-black">
         <h2
