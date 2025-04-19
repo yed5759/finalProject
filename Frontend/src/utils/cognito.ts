@@ -48,6 +48,7 @@ export function setupAmplify() {
       },
       region: 'us-east-1',
       OAuth: {
+        // todo put domain
         domain: 'your-domain.auth.us-east-1.amazoncognito.com',
         redirectSignIn: 'http://localhost:3000/home',
         redirectSignOut: 'http://localhost:3000/landing',

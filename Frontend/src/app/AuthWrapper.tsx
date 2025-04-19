@@ -10,7 +10,7 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("accessToken");
-      console.log("[AuthWrapper] Token found:", token);
+      console.log("[AuthWrapper] 🔍 Token found in localStorage:", token);
       setIsAuthenticated(!!token);  // Update the authentication status based on the token
     }
   }, []);  // This effect runs only once when the component mounts
@@ -29,6 +29,9 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
     else if (isAuthenticated === true && pathname === '/landing') {
       console.log("[AuthWrapper] Redirecting to /home");
       router.push("/home");
+    }
+    else {
+      console.log("[AuthWrapper] ✅ No redirect needed");
     }
   }, [isAuthenticated, pathname, router]);  // This effect runs when isAuthenticated or pathname changes
 

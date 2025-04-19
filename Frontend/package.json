@@ -12,6 +12,7 @@
     "@aws-amplify/auth": "^6.12.1",
     "@ljharb/tsconfig": "^0.3.2",
     "aws-amplify": "^6.14.1",
+    "bootstrap": "^5.3.5",
     "lucide-react": "^0.487.0",
     "next": "15.2.2",
     "react": "^19.0.0",
