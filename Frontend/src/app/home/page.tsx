@@ -1,11 +1,15 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, {useEffect, useRef} from 'react';
 import { useSearchParams } from 'next/navigation';
 
 export default function HomePage() {
     const searchParams = useSearchParams();
     const code = searchParams.get('code');
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const urlInputRef = useRef<HTMLInputElement>(null);
+    const instrumentRef = useRef<HTMLSelectElement>(null);
 
     useEffect(() => {
         console.log('🔵 [home] code from URL =', code);
@@ -14,25 +18,50 @@ export default function HomePage() {
             localStorage.setItem('accessToken', 'mock_token'); // החלפה אמיתית בהמשך
             console.log('🧩 [home] saved mock accessToken');
         }
+
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        if (urlInputRef.current) urlInputRef.current.value = "";
+        if (instrumentRef.current) instrumentRef.current.selectedIndex = 0;
     }, [code]);
 
-    function SmartSubmit(e: { preventDefault: () => void }) {
+    async function SmartSubmit(e: { preventDefault: () => void }) {
         e.preventDefault();
 
         const fileInput = document.getElementById('upload') as HTMLInputElement | null;
         const urlInput = document.getElementById('url') as HTMLInputElement | null;
-        const fileForm = document.getElementById('file-form') as HTMLFormElement | null;
-        const urlForm = document.getElementById('URL-form') as HTMLFormElement | null;
+        const instrumentSelect = document.getElementById('instrument') as HTMLInputElement | null;
 
         const file = fileInput?.files?.[0];
         const url = urlInput?.value.trim();
+        const instrument = instrumentSelect?.value || "piano";
 
-        if (file && fileForm) {
-            fileForm.submit();
-        } else if (url && urlForm) {
-            urlForm.submit();
+        const formData = new FormData();
+        formData.append("instrument", instrument);
+
+        let api = "/home";
+
+        if (file) {
+            formData.append("file", file);
+        } else if (url) {
+            formData.append("url", url);
         } else {
             alert('Please upload a file or enter a URL!');
+            return
+        }
+        try {
+            const response = await fetch(api, {
+                method: 'POST',
+                body: formData,
+            })
+            if (response.redirected) {
+                window.location.href = response.url;
+            } else {
+                const data = await response.text();
+                alert("Server response: " + data);
+            }
+        } catch (error) {
+            console.error("Error:", error);
+            alert("Something went wrong!");
         }
     }
 
@@ -47,16 +76,16 @@ export default function HomePage() {
             <div className="d-flex">
                 <div className="container text-center border border-1 border-black border-opacity-25 h-auto">
                     <h3 className="font-monospace m-3">Upload music file</h3>
-                    <form className="d-flex flex-column align-items-center mb-3" id="file-form">
+                    <form className="d-flex flex-column align-items-center mb-3" id="file-form" autoComplete="off">
                         <label htmlFor="upload">please choose a song</label>
-                        <input type="file" className="form-control w-75" id="upload" name="file" />
+                        <input type="file" className="form-control w-75" id="upload" name="file" autoComplete="off" ref={fileInputRef}/>
                     </form>
                 </div>
                 <div className="container text-center border border-1 border-black border-opacity-25 h-auto">
                     <h3 className="font-monospace m-3">Upload URL of a song</h3>
-                    <form className="d-flex flex-column align-items-center mb-3" id="URL-form">
+                    <form className="d-flex flex-column align-items-center mb-3" id="URL-form" autoComplete="off">
                         <label htmlFor="url">Please enter the URL for the song you picked:</label>
-                        <input type="url" className="form-control w-75" id="url" name="url"
+                        <input type="url" className="form-control w-75" id="url" name="url" autoComplete="off" ref={urlInputRef}
                             placeholder="https://www.youtube.com/watch?v=fake1234abcd" />
                     </form>
                 </div>
@@ -66,10 +95,10 @@ export default function HomePage() {
                     <button className="" onClick={SmartSubmit}>
                         Generate Notes
                     </button>
-                    <select className="" id="formatSelect" name="format" style={{ width: '50px', borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}>
-                        <option value="pdf">🎹</option>
-                        <option value="lilypond">🎸</option>
-                        <option value="musicxml">🎻</option>
+                    <select className="" id="instrument" name="format" style={{ width: '50px', borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }} ref={instrumentRef}>
+                        <option value="piano">🎹</option>
+                        <option value="guitar">🎸</option>
+                        <option value="violin">🎻</option>
                         <option value="flute">🪈</option>
                     </select>
                 </div>
