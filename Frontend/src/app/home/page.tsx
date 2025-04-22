@@ -3,42 +3,59 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+// import { useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload } from "lucide-react";
+import { parseCookies } from 'nookies';
 // import Navbar from '@/components/Navbar';
 
 
-
 export default function HomePage() {
-  const searchParams = useSearchParams();
-
+  // const searchParams = useSearchParams();
+  useEffect(() => {
+    // רק בצד הלקוח יש גישה ל-document
+    console.log('🟢 [home.tsx] document.cookie:', document.cookie);
+  }, []);
   const [url, setUrl] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    const code = searchParams.get("code")
-    if (code) {
-      // Send code to Flask
-      fetch("http://localhost:5000/auth/callback", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ code })
-      })
-        .then(res => res.json())
-        .then(data => {
-          console.log("✅ Tokens from Flask:", data)
-          // You can store tokens in cookie or context here
-        })
-        .catch(err => {
-          console.error("❌ Error sending code to Flask:", err)
-        })
+    // Check if there are any tokens in the cookies
+    const cookies = parseCookies();
+    const accessToken = cookies.accessToken;
+    console.log('🟢 [home.tsx] Cookies:', cookies);
+
+    if (!accessToken) {
+      // If no token is found, redirect to the landing page
+      console.log('🟡 [home.tsx] No accessToken, redirecting to /landing');
+      window.location.href = '/landing';
+    } else {
+      // todo If a token is found, you can send it to the server if needed
+      console.log('✅ Token found in cookies:', accessToken);
     }
-  }, [searchParams])
+  }, []);
+  // const code = searchParams.get("code")
+  //   if (code) {
+  //     // Send code to Flask
+  //     fetch("http://localhost:5000/auth/callback", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json"
+  //       },
+  //       body: JSON.stringify({ code })
+  //     })
+  //       .then(res => res.json())
+  //       .then(data => {
+  //         console.log("✅ Tokens from Flask:", data)
+  //         // You can store tokens in cookie or context here
+  //       })
+  //       .catch(err => {
+  //         console.error("❌ Error sending code to Flask:", err)
+  //       })
+  //   }
+  // }, [searchParams])
 
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {

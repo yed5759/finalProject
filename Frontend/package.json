@@ -13,8 +13,10 @@
     "@ljharb/tsconfig": "^0.3.2",
     "aws-amplify": "^6.14.1",
     "bootstrap": "^5.3.5",
+    "class-variance-authority": "^0.7.1",
     "lucide-react": "^0.487.0",
     "next": "15.2.2",
+    "nookies": "^2.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

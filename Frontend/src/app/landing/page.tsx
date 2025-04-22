@@ -11,14 +11,16 @@ export default function LandingPage() {
 
 
     const login = () => {
-        const redirectUri = window.location.origin.replace('/landing', '/home');
+        const redirectUri = 'http://localhost:5000/auth/callback'
+        // window.location.origin.replace('/landing', '/home');
         console.log('🟣 [landing] login redirectUri =', redirectUri);
         const loginUrl = `https://us-east-1ipj0spljz.auth.us-east-1.amazoncognito.com/login?client_id=1idr7soeln9lbch139sr9bmn8v&redirect_uri=${redirectUri}&response_type=code&scope=email+openid+phone`;
         router.push(loginUrl)
     }
 
     const register = () => {
-        const redirectUri = window.location.origin.replace('/landing', '/home');
+        const redirectUri = 'http://localhost:5000/auth/callback'
+        // window.location.origin.replace('/landing', '/home');
         const registerUrl = `https://us-east-1ipj0spljz.auth.us-east-1.amazoncognito.com/signup?client_id=1idr7soeln9lbch139sr9bmn8v&redirect_uri=${redirectUri}&response_type=code&scope=email+openid+phone`;
         router.push(registerUrl);
     }

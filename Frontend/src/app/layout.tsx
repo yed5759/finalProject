@@ -34,8 +34,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <body>
         <AppWrapper>
           {/* <Authenticator>{children}</Authenticator> */}
-
-          <AuthWrapper>{children}</AuthWrapper>
+          {children}
+          {/* <AuthWrapper>{children}</AuthWrapper> */}
         </AppWrapper>
       </body>
     </html>

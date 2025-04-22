@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation'; // Use Next.js Router for navigation
+import { parseCookies } from 'nookies';
 
 const Page = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -9,9 +10,15 @@ const Page = () => {
 
   useEffect(() => {
     // Here, we're checking if the user is authenticated, using a token or any other authentication mechanism
-    const token = localStorage.getItem('accessToken'); // Replace with your token check
-    console.log('🟢 [page.tsx] token =', token);
-    if (token) {
+    const cookies = parseCookies();
+    const accessToken = cookies.accessToken; // קבל את הטוקן מה-cookies
+    console.log('🟢 [page.tsx] Token from cookies =', accessToken);
+
+
+    // const token = localStorage.getItem('accessToken'); // Replace with your token check
+    // console.log('🟢 [page.tsx] token =', token);
+    // if (token) {
+    if (accessToken) {
       setIsAuthenticated(true);
     } else {
       setIsAuthenticated(false);
