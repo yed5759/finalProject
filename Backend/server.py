@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify, send_from_directory, redirect, make_response
+from flask import Flask, request, jsonify, redirect, make_response
+from flask import send_from_directory
 from dotenv import load_dotenv
 import os
 import requests
@@ -6,8 +7,10 @@ import requests
 # Load environment variables from .env file
 load_dotenv()
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__)
+# app = Flask(__name__, static_folder="static")
 
+# todo needed???
 # Static file routes
 
 # Serve index.html for root
@@ -66,6 +69,10 @@ def auth_callback():
     # todo delete print
     print("✅ Tokens received:", tokens)
 
+    # redirect_uri = f"http://localhost:3000/home?id_token={tokens['id_token']}&access_token={tokens['access_token']}"
+
+    # return redirect(redirect_uri)
+
     # Create response and set tokens as HttpOnly cookies
     res = make_response(redirect("http://localhost:3000/home"))
     res.set_cookie("id_token", tokens["id_token"], httponly=True, secure=False, path='/', samesite="Lax")
@@ -74,10 +81,10 @@ def auth_callback():
     # res.set_cookie("refresh_token", tokens.get("refresh_token"), httponly=True, secure=False)
     return res
 
-    return redirect("http://localhost:3000/home")
-    return jsonify(tokens)
-    # You’ll add the token exchange logic here
-    return jsonify({"message": "Received code", "code": code})
+    # return redirect("http://localhost:3000/home")
+    # return jsonify(tokens)
+    # # You’ll add the token exchange logic here
+    # return jsonify({"message": "Received code", "code": code})
 
 
 
