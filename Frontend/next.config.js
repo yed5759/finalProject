@@ -1,8 +1,8 @@
-module.exports = {
-    reactStrictMode: true,
-    devServer: {
-        proxy: {
-            '/api': 'http://localhost:5000',
-        },
-    },
-}
+// module.exports = {
+//     reactStrictMode: true,
+//     devServer: {
+//         proxy: {
+//             '/api': 'http://localhost:5000',
+//         },
+//     },
+// }
