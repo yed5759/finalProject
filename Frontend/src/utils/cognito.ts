@@ -1,50 +1,30 @@
-// // src/utils/cognito.ts
-// import { Amplify } from 'aws-amplify';
+// src/utils/cognito.ts
 
-// // Setup Amplify with environment variables
-// export function setupAmplify() {
-//   const {
-//     USER_POOL_ID: userPoolId,
-//     USER_POOL_CLIENT_ID: userPoolClientId,
-//     IDENTITY_POOL_ID: identityPoolId
-//   } = process.env
+import { parseCookies } from 'nookies';
 
-//   if (!(userPoolId && userPoolClientId && identityPoolId)) {
-//     throw new Error('invalid ENV');
-//   }
+export const getAccessTokenFromCookies = (): string | null => {
+  const cookies = parseCookies();
+  return cookies.accessToken || null;
+};
 
-//   Amplify.configure({
-//     Auth: {
-//       Cognito: {
-//         userPoolId,
-//         userPoolClientId,
-//         identityPoolId,
-//         loginWith: {
-//           email: true,
-//         },
-//         signUpVerificationMethod: "code",
-//         userAttributes: {
-//           email: {
-//             required: true,
-//           },
-//         },
-//         allowGuestAccess: true,
-//         passwordFormat: {
-//           minLength: 8,
-//           requireLowercase: true,
-//           requireUppercase: true,
-//           requireNumbers: true,
-//           requireSpecialCharacters: true,
-//         }
-//       },
-//       region: 'us-east-1',
-//       OAuth: {
-//         // todo put domain
-//         domain: 'your-domain.auth.us-east-1.amazoncognito.com',
-//         redirectSignIn: 'http://localhost:3000/home',
-//         redirectSignOut: 'http://localhost:3000/landing',
-//         responseType: 'code',
-//       },
-//     } as any,
-//   });
-// }
+export const isAuthenticated = (): boolean => {
+  const token = getAccessTokenFromCookies();
+  return !!token;
+};
+
+export const exchangeCodeForToken = async (code: string): Promise<boolean> => {
+  try {
+    // Send code to the Flask server to exchange it for tokens
+    const res = await fetch(`http://localhost:5000/auth/callback?code=${code}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    if (!res.ok) throw new Error('Failed to exchange code for token');
+
+    return true;
+  } catch (err) {
+    console.error('Token exchange error:', err);
+    return false;
+  }
+};
