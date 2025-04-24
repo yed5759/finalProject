@@ -3,7 +3,7 @@ import type { PropsWithChildren } from "react";
 
 import Navbar from "@/components/Navbar";
 import { usePathname } from "next/navigation";
-import AuthWrapper from "./AuthWrapper";
+// import AuthWrapper from "./AuthWrapper";
 
 export const AppWrapper = ({ children }: PropsWithChildren) => {
 
