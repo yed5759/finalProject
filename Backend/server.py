@@ -9,24 +9,9 @@ from flask_cors import CORS
 load_dotenv()
 
 app = Flask(__name__)
-# todo should it be static? i think better not
-# app = Flask(__name__, static_folder="static")
-
 
 # Enable CORS for the frontend domain
 CORS(app, origins = "http://localhost:3000", supports_credentials=True)
-
-# Static file routes
-
-# Serve index.html for root
-@app.route("/")
-def index():
-    return send_from_directory(app.static_folder, 'index.html')
-
-# Serve all other static files
-@app.route("/<path:path>")
-def catch_all(path):
-    return send_from_directory(app.static_folder, path)
 
 # Auth callback route from Cognito with ?code=...
 @app.route("/auth/callback", methods=["GET"])
@@ -65,10 +50,11 @@ def auth_callback():
     print(response)
 
     if response.status_code != 200:
-        print("❌ Error response:", response.text)
         return jsonify({"error": "Failed to exchange code", "details": response.text}), 400
 
     tokens = response.json()
+
+    return jsonify({"id_token": tokens["id_token"], "access_token": tokens["access_token"]})
 
     # Create response and set tokens as HttpOnly cookies
     res = make_response(jsonify({"message": "Tokens set in cookies"}))

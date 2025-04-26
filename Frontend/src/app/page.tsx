@@ -1,40 +1,42 @@
+//src/app/page.tsx
+
 'use client'
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { isAuthenticated, exchangeCodeForToken } from '@/utils/cognito';
+import { useAuth } from '@/context/AuthContext';
 
 const Page = () => {
-  const [authState, setAuthState] = useState<boolean | null>(null);
+  const { isAuthenticated, loading, checkAuth } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const tokenExists = isAuthenticated();
+    const initAuth = async () => {
       const code = searchParams.get('code');
+      await checkAuth(code || undefined);
+      setAuthChecked(true);
+    };
+    initAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      if (tokenExists) {
-        setAuthState(true);
+  useEffect(() => {
+    if (!loading && authChecked) {
+      if (isAuthenticated) {
         router.push('/home');
-      } else if (code) {
-        const success = await exchangeCodeForToken(code);
-        setAuthState(success);
-        router.push(success ? '/home' : '/landing');
       } else {
-        setAuthState(false);
         router.push('/landing');
       }
-    };
+    }
+  }, [isAuthenticated, loading, router]);
 
-    checkAuth();
-  }, [searchParams, router]);
-
-  if (isAuthenticated === null) {
-    return <div>Loading...</div>; // Show loading screen while checking the authentication
+  if (loading) {
+    return <>Loading...</>;
   }
 
-  return null; // No content to render here
+  return null;
 };
 
 export default Page;

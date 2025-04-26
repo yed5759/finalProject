@@ -1,8 +1,10 @@
+// src/app/layout.tsx
 
 import { Geist, Geist_Mono } from "next/font/google";
 import "../styles/globals.css";
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { AppWrapper } from "./AppWrapper";
+import { AuthProvider } from "@/context/AuthContext";
 
 // Load fonts in module scope
 const geistSans = Geist({
@@ -14,6 +16,7 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
 const fontsClassName = `${geistSans.variable} ${geistMono.variable} antialiased`
 
 // export const metadata = {
@@ -25,9 +28,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={fontsClassName}>
       <body>
-        <AppWrapper>
-          {children}
-        </AppWrapper>
+        <AuthProvider>
+          <AppWrapper>
+            {children}
+          </AppWrapper>
+        </AuthProvider>
       </body>
     </html>
   );

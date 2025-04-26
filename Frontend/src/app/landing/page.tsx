@@ -1,5 +1,7 @@
 // src/app/landing/page.tsx
+
 'use client';
+
 import "../../styles/landing.css"
 import Image from "next/image"
 import { useRouter } from 'next/navigation'
@@ -19,7 +21,6 @@ export default function LandingPage() {
         router.push(registerUrl);
     }
 
-
     return (
         <div>
             <link href="https://fonts.googleapis.com/css2?family=Italianno&display=swap" rel="stylesheet" />
@@ -30,7 +31,7 @@ export default function LandingPage() {
             <div className="container text-center overflow-hidden pt-lg-5">
                 <div className="row d-flex align-items-stretch h-100">
                     <div className="col">
-                        <Image src="/notes.png" alt="Notes" width={300} height={200} id="picture" />
+                        <Image src="/notes.png" alt="Notes" width={300} height={200} id="picture" priority />
                     </div>
                     <div className="col d-flex justify-content-center flex-column align-items-center text-center mb-1">
                         <h1><big>Generate Notes with Taking Notes</big></h1>
