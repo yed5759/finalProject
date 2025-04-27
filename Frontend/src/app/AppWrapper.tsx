@@ -3,7 +3,7 @@
 'use client';
 
 import type { PropsWithChildren } from "react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";

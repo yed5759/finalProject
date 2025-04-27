@@ -19,12 +19,10 @@ const Page = () => {
       setAuthChecked(true);
     };
     initAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!loading && authChecked) {
-      // if (!loading) {
       if (isAuthenticated) {
         router.replace('/home');
       } else {

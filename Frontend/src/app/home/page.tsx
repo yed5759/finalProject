@@ -3,9 +3,6 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Upload } from "lucide-react";
 
 export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
