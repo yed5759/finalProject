@@ -5,6 +5,12 @@
 import "../../styles/landing.css"
 import Image from "next/image"
 import { useRouter } from 'next/navigation'
+import { Italianno } from "next/font/google";
+
+const italianno = Italianno({
+    subsets: ['latin'],
+    weight: '400',
+});
 
 export default function LandingPage() {
     const router = useRouter()
@@ -23,7 +29,6 @@ export default function LandingPage() {
 
     return (
         <div>
-            <link href="https://fonts.googleapis.com/css2?family=Italianno&display=swap" rel="stylesheet" />
             <header id="stripe">
                 <h4>Compose yourself and take notes!</h4>
                 <p className="fs-6 fw-lighter"><small>Login to access the music notes generator</small></p>
@@ -34,7 +39,7 @@ export default function LandingPage() {
                         <Image src="/notes.png" alt="Notes" width={300} height={200} id="picture" priority />
                     </div>
                     <div className="col d-flex justify-content-center flex-column align-items-center text-center mb-1">
-                        <h1><big>Generate Notes with Taking Notes</big></h1>
+                        <h1 className={italianno.className}><big>Generate Notes with Taking Notes</big></h1>
                         <h2>start now!</h2>
                         <button type="button" className="btn btn-dark button mt-3" onClick={login}>Log in</button>
                     </div>
