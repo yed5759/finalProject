@@ -38,6 +38,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             alt="left decoration"
             fill
             style={{ objectFit: 'cover', objectPosition: 'top left' }}
+            priority
           />
         </div>
         <div style={{

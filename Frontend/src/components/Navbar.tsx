@@ -1,15 +1,12 @@
 'use client';
 
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import '../styles/Navbar.css';
 import { logout } from '@/utils/cognito';
 import { useAuth } from '@/context/AuthContext';
 
 export default function Navbar() {
   const { isAuthenticated, loading } = useAuth();
-  const router = useRouter();
 
   if (loading || !isAuthenticated) return null;
 
