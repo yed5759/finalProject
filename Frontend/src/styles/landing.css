@@ -1,8 +1,9 @@
 .row {
-    height: 100px; /* Adjust height as needed */
+    height: 100px;
     display: flex;
     align-items: center;
 }
+
 #stripe {
     background-color: #3b517c;
     color: white;
@@ -12,19 +13,23 @@
     width: 100vw;
     height: 120px;
 }
+
 #down {
     margin-left: 3cm;
     margin-right: 3cm;
     margin-top: 10px;
 }
+
 #picture {
     width: 600px;
     height: 400px;
     margin-top: -90px;
 }
+
 .button {
     width: 200px;
 }
+
 h1 {
     font-family: 'Italianno', cursive;
     font-size: 3rem;
