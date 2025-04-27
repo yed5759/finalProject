@@ -13,9 +13,9 @@ const Page = () => {
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    const initAuth = async () => {
+    const initAuth =  () => {
       const code = searchParams.get('code');
-      await checkAuth(code || undefined);
+      checkAuth(code || undefined);
       setAuthChecked(true);
     };
     initAuth();
