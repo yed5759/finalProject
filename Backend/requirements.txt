@@ -1,0 +1,6 @@
+boto3~=1.37.23
+yt-dlp~=2025.3.27
+dotenv~=0.9.9
+python-dotenv~=1.1.0
+
+Flask~=3.1.0

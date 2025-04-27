@@ -5,20 +5,16 @@
 import type { PropsWithChildren } from "react";
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
-// import { isAuthenticated } from "@/utils/cognito";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 export const AppWrapper = ({ children }: PropsWithChildren) => {
     const { isAuthenticated, checkAuth } = useAuth();
-    // const [authenticated, setAuthenticated] = useState<boolean | null>(null);
     const pathname = usePathname();
     const router = useRouter();
 
     useEffect(() => {
         checkAuth();
-        // const auth = isAuthenticated();
-        // setAuthenticated(auth);
 
         // Redirect based on auth status
         if (isAuthenticated && pathname === "/landing") {
