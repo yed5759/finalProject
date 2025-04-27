@@ -21,9 +21,7 @@ const Page = () => {
   }, []);
 
   useEffect(() => {
-    // todo check 
     if (!loading) {
-      // if (!loading) {
       if (isAuthenticated) {
         router.replace('/home');
       } else {
