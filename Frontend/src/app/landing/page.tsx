@@ -29,9 +29,11 @@ export default function LandingPage() {
 
     return (
         <div>
-            <header id="stripe">
+            <header id="stripe" style={{ position: "relative", zIndex: 10 }}>
                 <h4>Compose yourself and take notes!</h4>
-                <p className="fs-6 fw-lighter"><small>Login to access the music notes generator</small></p>
+                <p className="fs-6 fw-lighter">
+                    <small>Login to access the music notes generator</small>
+                </p>
             </header>
             <div className="container text-center overflow-hidden pt-lg-5">
                 <div className="row d-flex align-items-stretch h-100">
@@ -45,11 +47,13 @@ export default function LandingPage() {
                     </div>
                 </div>
             </div>
-            <div className="border-top border-dark" id="down">
+            <div className="border-top border-dark pb-5" id="down">
                 <div className="d-flex flex-column align-items-center justify-content-center mt-sm-5">
                     <h5>New User?</h5>
                     <p><small>Sign up and start using Taking Notes</small></p>
-                    <button type="button" className="btn btn-dark button" onClick={register}>Sign Up</button>
+                    <button type="button" className="btn btn-dark button mb-4" onClick={register}>
+                        Sign Up
+                    </button>
                 </div>
             </div>
         </div>
