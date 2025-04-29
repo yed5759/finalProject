@@ -28,8 +28,6 @@ def auth_callback():
     cognito_domain = os.getenv("COGNITO_DOMAIN")
 
     # Exchange code for tokens
-    # todo maybe change it and .env
-    # token_url = f"{cognito_domain}/oauth2/token"
     token_url = f"https://{cognito_domain}/oauth2/token"
 
     payload = {
@@ -55,16 +53,6 @@ def auth_callback():
     tokens = response.json()
 
     return jsonify({"id_token": tokens["id_token"], "access_token": tokens["access_token"]})
-
-    # Create response and set tokens as HttpOnly cookies
-    res = make_response(jsonify({"message": "Tokens set in cookies"}))
-    res.set_cookie("id_token", tokens["id_token"], httponly=True, secure=False, path='/', samesite="Lax")
-    res.set_cookie("access_token", tokens["access_token"], httponly=True, secure=False, path='/', samesite="Lax")
-
-    # todo decide where and if saving the refresh token on server side or just let the session end and ask for new tokens
-    # res.set_cookie("refresh_token", tokens.get("refresh_token"), httponly=True, secure=False)
-    return res
-
 
 if __name__ == "__main__":
     app.run(debug=True)
