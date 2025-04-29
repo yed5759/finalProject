@@ -3,9 +3,6 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Upload } from "lucide-react";
 
 export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -68,14 +65,14 @@ export default function HomePage() {
         </div>
       </div>
       <div className="d-flex">
-        <div className="container text-center border border-1 border-black border-opacity-25 h-auto">
+        <div className="container text-center border border-1 border-black border-opacity-25 h-auto" style={{ marginLeft: '3.5rem' }}>
           <h3 className="font-monospace m-3">Upload music file</h3>
           <form className="d-flex flex-column align-items-center mb-3" id="file-form" autoComplete="off">
             <label htmlFor="upload">please choose a song</label>
             <input type="file" className="form-control w-75" id="upload" name="file" autoComplete="off" ref={fileInputRef} />
           </form>
         </div>
-        <div className="container text-center border border-1 border-black border-opacity-25 h-auto">
+        <div className="container text-center border border-1 border-black border-opacity-25 h-auto" style={{ marginRight: '3.5rem' }}>
           <h3 className="font-monospace m-3">Upload URL of a song</h3>
           <form className="d-flex flex-column align-items-center mb-3" id="URL-form" autoComplete="off">
             <label htmlFor="url">Please enter the URL for the song you picked:</label>

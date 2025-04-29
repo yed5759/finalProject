@@ -13,13 +13,12 @@ const Page = () => {
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    const initAuth =  () => {
+    const initAuth =  async () => {
       const code = searchParams.get('code');
-      checkAuth(code || undefined);
+      await checkAuth(code || undefined);
       setAuthChecked(true);
     };
     initAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -30,7 +29,7 @@ const Page = () => {
         router.replace('/landing');
       }
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, authChecked, router]);
 
   if (loading) {
     return <>Loading...</>;
