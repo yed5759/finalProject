@@ -2,9 +2,13 @@
 
 import "../styles/globals.css";
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { AppWrapper } from "../components/AppWrapper";
+import { AppWrapper } from "./AppWrapper";
 import { AuthProvider } from "@/context/AuthContext";
 import Image from "next/image";
+
+export const metadata = {
+  title: 'Taking Notes',
+};
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (

@@ -13,7 +13,7 @@ const Page = () => {
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    const initAuth =  async () => {
+    const initAuth = async () => {
       const code = searchParams.get('code');
       await checkAuth(code || undefined);
       setAuthChecked(true);
@@ -32,7 +32,7 @@ const Page = () => {
   }, [isAuthenticated, loading, authChecked, router]);
 
   if (loading) {
-    return <>Loading...</>;
+    return <></>;
   }
 
   return null;

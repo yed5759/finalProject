@@ -1,46 +1,38 @@
-from functools import wraps
-from flask import request, jsonify
-from jose import jwt
+import os
 import requests
+from dotenv import load_dotenv
 
-# Replace these with your actual Cognito values:
-COGNITO_REGION = 'us-east-1'
-USER_POOL_ID = 'us-east-1_XXXXXX'
-CLIENT_ID = 'your_cognito_app_client_id'
+# Load environment variables from .env file
+load_dotenv()
 
-# Download JWKS from Cognito (you can cache this later for performance)
-JWKS_URL = f'https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json'
-JWKS = requests.get(JWKS_URL).json()
+# Exchange code for tokens
+def exchange_code_for_tokens(code):
+    # Load env vars
+    client_id = os.getenv("CLIENT_ID")
+    client_secret = os.getenv("CLIENT_SECRET")
+    redirect_uri = os.getenv("REDIRECT_URI")
+    cognito_domain = os.getenv("COGNITO_DOMAIN")
 
-def verify_token(token):
-    try:
-        headers = jwt.get_unverified_headers(token)
-        kid = headers['kid']
-        key = next(k for k in JWKS['keys'] if k['kid'] == kid)
+    # Exchange code for tokens
+    token_url = f"https://{cognito_domain}/oauth2/token"
 
-        payload = jwt.decode(
-            token,
-            key,
-            algorithms=['RS256'],
-            audience=CLIENT_ID,
-            issuer=f'https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{USER_POOL_ID}'
-        )
-        return payload
-    except Exception as e:
-        print(f"[AUTH] Token verification failed: {e}")
-        return None
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": client_id,
+        "code": code,
+        "redirect_uri": redirect_uri
+    }
 
-def require_auth(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({'error': 'Authorization header missing'}), 401
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    response = requests.post(
+        token_url, 
+        data=payload, 
+        headers=headers,
+        auth=(client_id, client_secret)
+    )
 
-        user = verify_token(token)
-        if not user:
-            return jsonify({'error': 'Invalid or expired token'}), 401
+    if response.status_code != 200:
+        return None, response.text
 
-        request.user = user  # Attach decoded token payload to request object
-        return f(*args, **kwargs)
-    return decorated_function
+    tokens = response.json()
+    return tokens, None
