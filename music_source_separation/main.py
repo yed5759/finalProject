@@ -12,9 +12,8 @@ def main():
     parser.add_argument('--cpu', action='store_true', help='Force CPU processing')
     parser.add_argument('--sample-rate', '-sr', type=int, default=16000, choices=[16000, 22050], 
                         help='Audio sample rate (16000 or 22050 Hz)')
-    parser.add_argument('--feature-type', '-ft', type=str, default='mel', choices=['mel', 'cqt', 'both'],
-                        help='Feature type for audio representation')
     parser.add_argument('--fft-size', '-fs', type=int, default=2048, help='FFT window size')
+    parser.add_argument('--cqt-bins', '-cb', type=int, default=84, help='Number of CQT bins')
     
     args = parser.parse_args()
     
@@ -48,7 +47,7 @@ def main():
                         output_path,
                         sample_rate=args.sample_rate,
                         n_fft=args.fft_size,
-                        feature_type=args.feature_type
+                        n_cqt_bins=args.cqt_bins
                     )
                     processed += 1
                 except Exception as e:
@@ -74,7 +73,7 @@ def main():
                 output_file,
                 sample_rate=args.sample_rate,
                 n_fft=args.fft_size,
-                feature_type=args.feature_type
+                n_cqt_bins=args.cqt_bins
             )
             
             # Print statistics

@@ -14,14 +14,14 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-from piano_transformer import PianoTransformer, preprocess_audio, create_midi_from_predictions
+from piano_transformer import PianoTransformer, preprocess_audio
 import pretty_midi
 
 class PianoDataset(Dataset):
     """Dataset for piano transcription"""
     
-    def __init__(self, data_dir, split='train', feature_type='mel', 
-                 sample_rate=16000, n_fft=2048, hop_length=512,
+    def __init__(self, data_dir, split='train', 
+                 sample_rate=16000, n_fft=2048, hop_length=512, n_cqt_bins=84,
                  sequence_length=None, max_files=None):
         """
         Initialize dataset
@@ -29,19 +29,19 @@ class PianoDataset(Dataset):
         Args:
             data_dir: Path to data directory
             split: 'train', 'val', or 'test'
-            feature_type: 'mel', 'cqt', or 'both'
             sample_rate: Sample rate
             n_fft: FFT window size
             hop_length: Hop length
+            n_cqt_bins: Number of CQT bins
             sequence_length: Sequence length (if None, use full sequences)
             max_files: Maximum number of files to load (for debugging)
         """
         self.data_dir = Path(data_dir)
         self.split = split
-        self.feature_type = feature_type
         self.sample_rate = sample_rate
         self.n_fft = n_fft
         self.hop_length = hop_length
+        self.n_cqt_bins = n_cqt_bins
         self.sequence_length = sequence_length
         
         # Get audio and MIDI paths
@@ -73,19 +73,19 @@ class PianoDataset(Dataset):
     def __getitem__(self, idx):
         pair = self.pairs[idx]
         
-        # Process audio
+        # Process audio to extract CQT and onset/offset/velocity features
         features, _ = preprocess_audio(
             pair['audio'], 
             sample_rate=self.sample_rate,
             n_fft=self.n_fft, 
             hop_length=self.hop_length,
-            feature_type=self.feature_type
+            n_cqt_bins=self.n_cqt_bins
         )
         features = torch.tensor(features, dtype=torch.float32).T  # (time, features)
         
-        # Extract piano roll from MIDI
+        # Extract piano roll with onset, offset and velocity information
         midi_data = pretty_midi.PrettyMIDI(str(pair['midi']))
-        piano_roll = self._extract_piano_roll(midi_data, features.shape[0])
+        piano_roll = self._extract_piano_roll_with_onsets_offsets_velocity(midi_data, features.shape[0])
         
         # Apply sequence length if specified
         if self.sequence_length is not None and features.shape[0] > self.sequence_length:
@@ -99,32 +99,67 @@ class PianoDataset(Dataset):
         
         return features, piano_roll
     
-    def _extract_piano_roll(self, midi_data, length):
-        """Extract piano roll from MIDI data"""
+    def _extract_piano_roll_with_onsets_offsets_velocity(self, midi_data, length):
+        """
+        Extract piano roll with onset, offset, and velocity information
+        
+        Args:
+            midi_data: PrettyMIDI object
+            length: Desired length of the piano roll
+            
+        Returns:
+            piano_roll: Piano roll with shape (length, 88*3)
+                First 88 columns: Note onsets
+                Next 88 columns: Note offsets
+                Last 88 columns: Note velocities
+        """
         # Time between frames
         hop_time = self.hop_length / self.sample_rate
         
-        # Get piano roll (frame_rate = frames per second)
-        frame_rate = 1 / hop_time
-        piano_roll = midi_data.get_piano_roll(fs=frame_rate)
+        # Create empty piano roll with 88*3 columns
+        piano_roll = np.zeros((length, 88 * 3), dtype=np.float32)
         
-        # Limit to 88 keys (from A0 to C8)
-        piano_roll = piano_roll[21:109, :]
+        # Get all piano notes
+        notes = []
+        for instrument in midi_data.instruments:
+            if not instrument.is_drum:  # Skip drum tracks
+                notes.extend(instrument.notes)
         
-        # Transpose to (time, pitch)
-        piano_roll = piano_roll.T
+        # Sort notes by start time
+        notes.sort(key=lambda x: x.start)
         
-        # Ensure piano roll has the same length as features
-        if piano_roll.shape[0] < length:
-            # Pad
-            padding = np.zeros((length - piano_roll.shape[0], piano_roll.shape[1]))
-            piano_roll = np.concatenate((piano_roll, padding), axis=0)
-        elif piano_roll.shape[0] > length:
-            # Truncate
-            piano_roll = piano_roll[:length, :]
+        # Fill in onset, offset, and velocity information
+        for note in notes:
+            # Only consider notes in the 88-key piano range (21-108)
+            if not (21 <= note.pitch <= 108):
+                continue
+                
+            # Convert MIDI pitch to piano key index (0-87)
+            piano_key = note.pitch - 21
+            
+            # Convert start and end times to frame indices
+            start_frame = int(note.start / hop_time)
+            end_frame = int(note.end / hop_time)
+            
+            # Ensure frames are within bounds
+            if start_frame >= length or end_frame < 0:
+                continue
+                
+            start_frame = max(0, start_frame)
+            end_frame = min(length - 1, end_frame)
+            
+            # Mark onset frame
+            piano_roll[start_frame, piano_key] = 1.0  # Onset
+            
+            # Mark offset frame
+            if end_frame < length:
+                piano_roll[end_frame, piano_key + 88] = 1.0  # Offset
+            
+            # Fill in velocity for all active frames
+            # Normalize velocity to [0, 1]
+            normalized_velocity = note.velocity / 127.0
+            piano_roll[start_frame:end_frame+1, piano_key + 2*88] = normalized_velocity
         
-        # Binarize and convert to tensor
-        piano_roll = (piano_roll > 0).astype(np.float32)
         return torch.tensor(piano_roll, dtype=torch.float32)
 
 def train_model(args):
@@ -139,13 +174,7 @@ def train_model(args):
     
     # Create model
     print("Creating model...")
-    input_dim = 128
-    if args.feature_type == 'cqt':
-        input_dim = 84 + 1  # CQT bins + onset
-    elif args.feature_type == 'both':
-        input_dim = 128 + 84 + 1  # Mel + CQT + onset
-    elif args.feature_type == 'mel':
-        input_dim = 128 + 1  # Mel + onset
+    input_dim = args.cqt_bins + 3  # CQT bins + onset + offset + velocity features
     
     model = PianoTransformer(
         input_dim=input_dim,
@@ -153,12 +182,14 @@ def train_model(args):
         nhead=args.nhead,
         num_layers=args.num_layers,
         dim_feedforward=args.dim_feedforward,
-        output_dim=88,
+        output_dim=88 * 3,  # 88 piano keys * 3 outputs (onset, offset, velocity)
         dropout=args.dropout
     ).to(device)
     
     # Define loss function and optimizer
+    # Use weighted BCE loss to balance the importance of onset, offset, and velocity prediction
     criterion = nn.BCELoss()
+    
     optimizer = optim.Adam(
         model.parameters(), 
         lr=args.learning_rate, 
@@ -176,10 +207,10 @@ def train_model(args):
     train_dataset = PianoDataset(
         args.data_dir, 
         split='train',
-        feature_type=args.feature_type,
         sample_rate=args.sample_rate,
         n_fft=args.fft_size,
         hop_length=args.hop_length,
+        n_cqt_bins=args.cqt_bins,
         sequence_length=args.sequence_length,
         max_files=args.max_files
     )
@@ -187,10 +218,10 @@ def train_model(args):
     val_dataset = PianoDataset(
         args.data_dir, 
         split='val',
-        feature_type=args.feature_type,
         sample_rate=args.sample_rate,
         n_fft=args.fft_size,
         hop_length=args.hop_length,
+        n_cqt_bins=args.cqt_bins,
         max_files=args.max_files
     )
     
@@ -220,7 +251,9 @@ def train_model(args):
         # Training
         model.train()
         train_loss = 0.0
-        train_accuracy = 0.0
+        train_onset_accuracy = 0.0
+        train_offset_accuracy = 0.0
+        train_velocity_loss = 0.0
         start_time = time.time()
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{args.epochs}")
@@ -232,6 +265,17 @@ def train_model(args):
             
             # Forward pass
             outputs = model(features)
+            
+            # Split outputs and targets for separate metrics
+            onset_output = outputs[:, :, :88]
+            offset_output = outputs[:, :, 88:176]
+            velocity_output = outputs[:, :, 176:264]
+            
+            onset_target = targets[:, :, :88]
+            offset_target = targets[:, :, 88:176]
+            velocity_target = targets[:, :, 176:264]
+            
+            # Calculate loss
             loss = criterion(outputs, targets)
             
             # Backward pass and optimize
@@ -240,17 +284,22 @@ def train_model(args):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clip)
             optimizer.step()
             
-            # Calculate accuracy
-            accuracy = ((outputs > 0.5) == (targets > 0.5)).float().mean().item()
+            # Calculate accuracies
+            onset_accuracy = ((onset_output > 0.5) == (onset_target > 0.5)).float().mean().item()
+            offset_accuracy = ((offset_output > 0.5) == (offset_target > 0.5)).float().mean().item()
+            velocity_loss_val = nn.MSELoss()(velocity_output, velocity_target).item()
             
             # Update statistics
             train_loss += loss.item()
-            train_accuracy += accuracy
+            train_onset_accuracy += onset_accuracy
+            train_offset_accuracy += offset_accuracy
+            train_velocity_loss += velocity_loss_val
             
             # Update progress bar
             progress_bar.set_postfix({
                 'loss': loss.item(),
-                'acc': accuracy
+                'onset_acc': onset_accuracy,
+                'offset_acc': offset_accuracy
             })
             
             # Free up memory
@@ -259,14 +308,18 @@ def train_model(args):
         
         # Calculate average training statistics
         train_loss /= len(train_loader)
-        train_accuracy /= len(train_loader)
+        train_onset_accuracy /= len(train_loader)
+        train_offset_accuracy /= len(train_loader)
+        train_velocity_loss /= len(train_loader)
         train_time = time.time() - start_time
         train_losses.append(train_loss)
         
         # Validation
         model.eval()
         val_loss = 0.0
-        val_accuracy = 0.0
+        val_onset_accuracy = 0.0
+        val_offset_accuracy = 0.0
+        val_velocity_loss = 0.0
         start_time = time.time()
         
         with torch.no_grad():
@@ -275,14 +328,29 @@ def train_model(args):
                 
                 # Forward pass
                 outputs = model(features)
+                
+                # Calculate loss
                 loss = criterion(outputs, targets)
                 
-                # Calculate accuracy
-                accuracy = ((outputs > 0.5) == (targets > 0.5)).float().mean().item()
+                # Split outputs and targets for separate metrics
+                onset_output = outputs[:, :, :88]
+                offset_output = outputs[:, :, 88:176]
+                velocity_output = outputs[:, :, 176:264]
+                
+                onset_target = targets[:, :, :88]
+                offset_target = targets[:, :, 88:176]
+                velocity_target = targets[:, :, 176:264]
+                
+                # Calculate accuracies
+                onset_accuracy = ((onset_output > 0.5) == (onset_target > 0.5)).float().mean().item()
+                offset_accuracy = ((offset_output > 0.5) == (offset_target > 0.5)).float().mean().item()
+                velocity_loss_val = nn.MSELoss()(velocity_output, velocity_target).item()
                 
                 # Update statistics
                 val_loss += loss.item()
-                val_accuracy += accuracy
+                val_onset_accuracy += onset_accuracy
+                val_offset_accuracy += offset_accuracy
+                val_velocity_loss += velocity_loss_val
                 
                 # Free up memory
                 del features, targets, outputs
@@ -290,7 +358,9 @@ def train_model(args):
         
         # Calculate average validation statistics
         val_loss /= len(val_loader)
-        val_accuracy /= len(val_loader)
+        val_onset_accuracy /= len(val_loader)
+        val_offset_accuracy /= len(val_loader)
+        val_velocity_loss /= len(val_loader)
         val_time = time.time() - start_time
         val_losses.append(val_loss)
         
@@ -299,8 +369,10 @@ def train_model(args):
         
         # Print epoch statistics
         print(f"Epoch {epoch+1}/{args.epochs} - "
-              f"Train Loss: {train_loss:.4f}, Acc: {train_accuracy:.4f}, Time: {train_time:.2f}s - "
-              f"Val Loss: {val_loss:.4f}, Acc: {val_accuracy:.4f}, Time: {val_time:.2f}s")
+              f"Train Loss: {train_loss:.4f}, Onset Acc: {train_onset_accuracy:.4f}, Offset Acc: {train_offset_accuracy:.4f}, "
+              f"Vel Loss: {train_velocity_loss:.4f}, Time: {train_time:.2f}s - "
+              f"Val Loss: {val_loss:.4f}, Onset Acc: {val_onset_accuracy:.4f}, Offset Acc: {val_offset_accuracy:.4f}, "
+              f"Vel Loss: {val_velocity_loss:.4f}, Time: {val_time:.2f}s")
         
         # Save model if it's the best
         if val_loss < best_val_loss:
@@ -339,10 +411,10 @@ def train_model(args):
     # Save hyperparameters
     with open(output_dir / "hyperparameters.json", 'w') as f:
         json.dump({
-            'feature_type': args.feature_type,
             'sample_rate': args.sample_rate,
             'fft_size': args.fft_size,
             'hop_length': args.hop_length,
+            'cqt_bins': args.cqt_bins,
             'd_model': args.d_model,
             'nhead': args.nhead,
             'num_layers': args.num_layers,
@@ -372,14 +444,14 @@ def main():
                       help='Maximum number of files to use (for debugging)')
     
     # Audio parameters
-    parser.add_argument('--feature-type', type=str, default='mel', choices=['mel', 'cqt', 'both'],
-                      help='Feature type for audio representation')
     parser.add_argument('--sample-rate', type=int, default=16000, choices=[16000, 22050],
                       help='Audio sample rate')
     parser.add_argument('--fft-size', type=int, default=2048,
                       help='FFT window size')
     parser.add_argument('--hop-length', type=int, default=512,
                       help='Hop length for FFT')
+    parser.add_argument('--cqt-bins', type=int, default=84,
+                      help='Number of CQT bins')
     
     # Model parameters
     parser.add_argument('--d-model', type=int, default=512,

@@ -12,18 +12,17 @@ This project has a simple and straightforward structure:
 - `train_model.py`: Script for training the piano transformer model
 - `evaluate_model.py`: Script for evaluating model performance
 
-## Audio Features
+## Audio Features and Representation
 
-The system supports multiple audio representations:
+The system uses Constant-Q Transform (CQT) as the audio representation, which better matches the logarithmic nature of musical pitch scales. The model is designed specifically for piano audio:
 
-- **Mel Spectrogram**: Traditional mel-frequency spectrogram
-- **Constant-Q Transform (CQT)**: Frequency representation that better matches musical scales
-- **Onset Detection**: Automatic detection of note onsets
+- **Constant-Q Transform (CQT)**: Frequency representation with logarithmically spaced frequency bins that better match musical scales
+- **Explicit Onset-Offset-Velocity Representation**: The model predicts three aspects for each of the 88 piano keys:
+  - Note onsets (beginnings)
+  - Note offsets (endings) 
+  - Note velocities (loudness)
 
-It also supports explicit modeling of:
-- Note onsets (beginnings)
-- Note offsets (endings)
-- Note velocities (loudness)
+This representation enables more precise transcription with accurate timing and dynamics.
 
 ## Dataset Preparation
 
@@ -47,18 +46,16 @@ The script will:
 You can train the model using the MAESTRO dataset:
 
 ```bash
-# Train with default settings (mel spectrogram features)
+# Train with default settings
 python train_model.py --data-dir data --output-dir models
 
-# Train with CQT features
-python train_model.py --data-dir data --feature-type cqt --output-dir models/cqt_model
-
-# Train with both mel and CQT features
-python train_model.py --data-dir data --feature-type both --sample-rate 22050 --output-dir models/combined_model
+# Train with custom CQT bins and sample rate
+python train_model.py --data-dir data --cqt-bins 96 --sample-rate 22050 --output-dir models/high_res_model
 ```
 
 The training script includes:
-- Automatic logging of metrics
+- Training with explicit onset-offset-velocity targets
+- Automatic logging of metrics for each aspect (onset accuracy, offset accuracy, velocity error)
 - Model checkpointing
 - Learning rate scheduling
 - Visualization of training progress
@@ -71,28 +68,26 @@ You can evaluate a trained model on the test set:
 # Evaluate model with default settings
 python evaluate_model.py --model-path models/best_model.pth --data-dir data
 
-# Evaluate with different feature types
-python evaluate_model.py --model-path models/cqt_model/best_model.pth --feature-type cqt --data-dir data
+# Evaluate with different CQT settings
+python evaluate_model.py --model-path models/high_res_model/best_model.pth --cqt-bins 96 --sample-rate 22050 --data-dir data
 ```
 
 The evaluation script measures:
-- Precision, Recall, and F1 score
-- Note-level accuracy
-- Onset and offset detection performance
+- Onset precision, recall, and F1 score
+- Offset precision, recall, and F1 score
+- Velocity error
+- Overall note-level accuracy
 
 ## Usage
 
 You can use the system for transcription through the command-line interface:
 
 ```bash
-# Process a single file with default settings (mel spectrogram)
+# Process a single file with default settings
 python main.py --input sample.wav --output output.mid
 
-# Process using CQT representation
-python main.py --input sample.wav --output output.mid --feature-type cqt
-
-# Process using both mel and CQT features
-python main.py --input sample.wav --output output.mid --feature-type both --sample-rate 22050
+# Process with custom CQT settings
+python main.py --input sample.wav --output output.mid --cqt-bins 96 --sample-rate 22050
 
 # Process a directory of files
 python main.py --input audio_folder/ --output midi_folder/ --batch
@@ -111,8 +106,8 @@ python main.py --input sample.wav --model models/best_model.pth
 - `--batch, -b`: Process directory of WAV files (flag)
 - `--cpu`: Force CPU processing (flag)
 - `--sample-rate, -sr`: Audio sample rate, either 16000 or 22050 Hz (default: 16000)
-- `--feature-type, -ft`: Audio feature type: 'mel', 'cqt', or 'both' (default: 'mel')
 - `--fft-size, -fs`: FFT window size (default: 2048)
+- `--cqt-bins, -cb`: Number of CQT bins (default: 84)
 
 ### Dataset Preparation Script
 
@@ -124,9 +119,9 @@ python main.py --input sample.wav --model models/best_model.pth
 
 - `--data-dir`: Path to data directory (default: "data")
 - `--output-dir`: Path to output directory (default: "models")
-- `--feature-type`: Audio feature type (default: "mel")
 - `--sample-rate`: Audio sample rate (default: 16000)
 - `--fft-size`: FFT window size (default: 2048)
+- `--cqt-bins`: Number of CQT bins (default: 84)
 - `--batch-size`: Batch size (default: 8)
 - `--epochs`: Number of epochs (default: 50)
 
