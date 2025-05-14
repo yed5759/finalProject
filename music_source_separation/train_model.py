@@ -21,8 +21,6 @@ class PianoDataset(Dataset):
     
     def __init__(self, data_dir, split='train', 
                  sample_rate=16000, n_fft=2048, hop_length=512, n_cqt_bins=84,
-    def __init__(self, data_dir, split='train', 
-                 sample_rate=16000, n_fft=2048, hop_length=512, n_cqt_bins=84,
                  sequence_length=None, max_files=None):
         """
         Initialize dataset
@@ -34,7 +32,6 @@ class PianoDataset(Dataset):
             n_fft: FFT window size
             hop_length: Hop length
             n_cqt_bins: Number of CQT bins
-            n_cqt_bins: Number of CQT bins
             sequence_length: Sequence length (if None, use full sequences)
             max_files: Maximum number of files to load (for debugging)
         """
@@ -43,7 +40,6 @@ class PianoDataset(Dataset):
         self.sample_rate = sample_rate
         self.n_fft = n_fft
         self.hop_length = hop_length
-        self.n_cqt_bins = n_cqt_bins
         self.n_cqt_bins = n_cqt_bins
         self.sequence_length = sequence_length
         
@@ -77,21 +73,17 @@ class PianoDataset(Dataset):
         pair = self.pairs[idx]
         
         # Process audio to extract CQT and onset/offset/velocity features
-        # Process audio to extract CQT and onset/offset/velocity features
         features, _ = preprocess_audio(
             pair['audio'], 
             sample_rate=self.sample_rate,
             n_fft=self.n_fft, 
             hop_length=self.hop_length,
             n_cqt_bins=self.n_cqt_bins
-            n_cqt_bins=self.n_cqt_bins
         )
         features = torch.tensor(features, dtype=torch.float32).T  # (time, features)
         
         # Extract piano roll with onset, offset and velocity information
-        # Extract piano roll with onset, offset and velocity information
         midi_data = pretty_midi.PrettyMIDI(str(pair['midi']))
-        piano_roll = self._extract_piano_roll_with_onsets_offsets_velocity(midi_data, features.shape[0])
         piano_roll = self._extract_piano_roll_with_onsets_offsets_velocity(midi_data, features.shape[0])
         
         # Apply sequence length if specified
@@ -120,20 +112,6 @@ class PianoDataset(Dataset):
                 Next 88 columns: Note offsets
                 Last 88 columns: Note velocities
         """
-    def _extract_piano_roll_with_onsets_offsets_velocity(self, midi_data, length):
-        """
-        Extract piano roll with onset, offset, and velocity information
-        
-        Args:
-            midi_data: PrettyMIDI object
-            length: Desired length of the piano roll
-            
-        Returns:
-            piano_roll: Piano roll with shape (length, 88*3)
-                First 88 columns: Note onsets
-                Next 88 columns: Note offsets
-                Last 88 columns: Note velocities
-        """
         # Time between frames
         hop_time = self.hop_length / self.sample_rate
         
@@ -148,49 +126,6 @@ class PianoDataset(Dataset):
         
         # Sort notes by start time
         notes.sort(key=lambda x: x.start)
-        # Create empty piano roll with 88*3 columns
-        piano_roll = np.zeros((length, 88 * 3), dtype=np.float32)
-        
-        # Get all piano notes
-        notes = []
-        for instrument in midi_data.instruments:
-            if not instrument.is_drum:  # Skip drum tracks
-                notes.extend(instrument.notes)
-        
-        # Sort notes by start time
-        notes.sort(key=lambda x: x.start)
-        
-        # Fill in onset, offset, and velocity information
-        for note in notes:
-            # Only consider notes in the 88-key piano range (21-108)
-            if not (21 <= note.pitch <= 108):
-                continue
-                
-            # Convert MIDI pitch to piano key index (0-87)
-            piano_key = note.pitch - 21
-            
-            # Convert start and end times to frame indices
-            start_frame = int(note.start / hop_time)
-            end_frame = int(note.end / hop_time)
-            
-            # Ensure frames are within bounds
-            if start_frame >= length or end_frame < 0:
-                continue
-                
-            start_frame = max(0, start_frame)
-            end_frame = min(length - 1, end_frame)
-            
-            # Mark onset frame
-            piano_roll[start_frame, piano_key] = 1.0  # Onset
-            
-            # Mark offset frame
-            if end_frame < length:
-                piano_roll[end_frame, piano_key + 88] = 1.0  # Offset
-            
-            # Fill in velocity for all active frames
-            # Normalize velocity to [0, 1]
-            normalized_velocity = note.velocity / 127.0
-            piano_roll[start_frame:end_frame+1, piano_key + 2*88] = normalized_velocity
         
         # Fill in onset, offset, and velocity information
         for note in notes:
