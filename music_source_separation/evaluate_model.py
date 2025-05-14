@@ -1,198 +1,377 @@
 #!/usr/bin/env python3
 
 import os
-import argparse
 import torch
+import argparse
 import numpy as np
-import json
+import matplotlib.pyplot as plt
+import pretty_midi
 from pathlib import Path
 from tqdm import tqdm
-import mir_eval
-import pretty_midi
+from sklearn.metrics import precision_recall_fscore_support, mean_squared_error
 
-from piano_transformer import PianoTranscriptionSystem
-
-def evaluate_transcription(reference_file, estimated_file):
-    """
-    Evaluate transcription using mir_eval metrics
-    
-    Args:
-        reference_file: Path to reference MIDI file
-        estimated_file: Path to estimated MIDI file
-        
-    Returns:
-        metrics: Dictionary of evaluation metrics
-    """
-    # Load reference MIDI
-    ref_midi = pretty_midi.PrettyMIDI(str(reference_file))
-    ref_intervals, ref_pitches = ref_midi.get_piano_roll_intervals_and_pitches()
-    
-    # Load estimated MIDI
-    est_midi = pretty_midi.PrettyMIDI(str(estimated_file))
-    est_intervals, est_pitches = est_midi.get_piano_roll_intervals_and_pitches()
-    
-    # Convert pitches to midi note numbers if needed
-    if ref_pitches.dtype.kind == 'f':
-        ref_pitches = np.array(ref_pitches, dtype=np.int)
-    if est_pitches.dtype.kind == 'f':
-        est_pitches = np.array(est_pitches, dtype=np.int)
-    
-    # Evaluate
-    # If there are no notes, return placeholder metrics
-    if len(ref_intervals) == 0 or len(est_intervals) == 0:
-        return {
-            'precision': 0.0,
-            'recall': 0.0,
-            'f1': 0.0,
-            'accuracy': 0.0,
-            'error_rate': 1.0
-        }
-    
-    # Calculate metrics
-    results = mir_eval.transcription.evaluate(
-        ref_intervals, 
-        ref_pitches,
-        est_intervals,
-        est_pitches,
-        onset_tolerance=0.05,  # 50ms tolerance
-        offset_ratio=0.2  # 20% of the note length
-    )
-    
-    # Extract key metrics
-    metrics = {
-        'precision': results['Precision'],
-        'recall': results['Recall'],
-        'f1': results['F-measure'],
-        'accuracy': results['Accuracy'],
-        'error_rate': 1.0 - results['Accuracy']
-    }
-    
-    return metrics
+from piano_transformer import PianoTransformer, process_audio_file, midi_to_piano_roll
 
 def evaluate_model(args):
-    """Evaluate the piano transcription system on the test set"""
+    device = torch.device('cuda' if torch.cuda.is_available() and not args.cpu else 'cpu')
+    print(f"Using device: {device}")
     
-    # Initialize transcription system
-    system = PianoTranscriptionSystem(
-        model_path=args.model_path,
-        device='cuda' if torch.cuda.is_available() and not args.cpu else 'cpu'
-    )
+    # Load model
+    model_path = Path(args.model_path)
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model file not found: {model_path}")
     
-    # Get test data paths
-    data_dir = Path(args.data_dir)
-    test_audio_dir = data_dir / 'test' / 'audio'
-    test_midi_dir = data_dir / 'test' / 'midi'
+    # Determine model parameters (either from checkpoint or user arguments)
+    if model_path.suffix == '.pt':
+        # Try to load a checkpoint that includes arguments
+        try:
+            checkpoint = torch.load(model_path, map_location=device)
+            if isinstance(checkpoint, dict) and 'args' in checkpoint:
+                model_args = argparse.Namespace(**checkpoint['args'])
+                print("Loaded model parameters from checkpoint")
+                n_cqt_bins = model_args.n_cqt_bins
+                hidden_dim = model_args.hidden_dim
+                num_layers = model_args.num_layers
+                num_heads = model_args.num_heads
+                dropout = model_args.dropout
+            else:
+                # Just a state dict, use command line args
+                n_cqt_bins = args.n_cqt_bins
+                hidden_dim = args.hidden_dim
+                num_layers = args.num_layers
+                num_heads = args.num_heads
+                dropout = args.dropout
+        except Exception as e:
+            print(f"Error loading checkpoint arguments: {e}")
+            n_cqt_bins = args.n_cqt_bins
+            hidden_dim = args.hidden_dim
+            num_layers = args.num_layers
+            num_heads = args.num_heads
+            dropout = args.dropout
+    else:
+        # Use command line arguments
+        n_cqt_bins = args.n_cqt_bins
+        hidden_dim = args.hidden_dim
+        num_layers = args.num_layers
+        num_heads = args.num_heads
+        dropout = args.dropout
+    
+    # Create model
+    model = PianoTransformer(
+        n_cqt_bins=n_cqt_bins,
+        hidden_dim=hidden_dim,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        dropout=dropout
+    ).to(device)
+    
+    # Load model weights
+    if model_path.suffix == '.pt':
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            model.load_state_dict(torch.load(model_path, map_location=device))
+    else:
+        model.load_state_dict(torch.load(model_path, map_location=device))
+    
+    model.eval()
+    print("Model loaded successfully")
     
     # Create output directory
     output_dir = Path(args.output_dir)
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create results directory
-    results_dir = output_dir / 'transcriptions'
-    os.makedirs(results_dir, exist_ok=True)
+    # Get test files
+    test_audio_dir = Path(args.data_dir) / 'test' / 'audio'
+    test_midi_dir = Path(args.data_dir) / 'test' / 'midi'
     
-    # Get all test files
-    test_audio_files = sorted(list(test_audio_dir.glob('*.wav')))
-    midi_files = {f.stem: f for f in test_midi_dir.glob('*.mid')}
+    if not test_audio_dir.exists() or not test_midi_dir.exists():
+        raise FileNotFoundError(f"Test data not found in {args.data_dir}/test")
     
-    # Filter to files that have both audio and MIDI
-    test_pairs = []
-    for audio_file in test_audio_files:
-        if audio_file.stem in midi_files:
-            test_pairs.append({
-                'audio': audio_file,
-                'midi': midi_files[audio_file.stem]
-            })
+    audio_files = sorted(list(test_audio_dir.glob('*.wav')))
+    midi_files = []
     
-    # Limit the number of files if specified
-    if args.max_files is not None:
-        test_pairs = test_pairs[:args.max_files]
+    for audio_file in audio_files:
+        midi_file = test_midi_dir / f"{audio_file.stem}.mid"
+        if midi_file.exists():
+            midi_files.append(midi_file)
+        else:
+            print(f"Warning: No matching MIDI file for {audio_file}")
+            audio_files.remove(audio_file)
     
-    print(f"Evaluating on {len(test_pairs)} test files")
+    print(f"Found {len(audio_files)} test files with matching MIDI")
     
-    # Evaluate each file
-    all_metrics = []
-    for pair in tqdm(test_pairs):
-        # Transcribe audio
-        output_file = results_dir / f"{pair['audio'].stem}_transcribed.mid"
+    # Evaluation metrics
+    metrics = {
+        'onset_precision': [],
+        'onset_recall': [],
+        'onset_f1': [],
+        'offset_precision': [],
+        'offset_recall': [],
+        'offset_f1': [],
+        'velocity_rmse': []
+    }
+    
+    # Process each test file
+    for i, (audio_file, midi_file) in enumerate(zip(audio_files, midi_files)):
+        print(f"\nProcessing file {i+1}/{len(audio_files)}: {audio_file.name}")
         
-        try:
-            # Transcribe audio to MIDI
-            system.transcribe(
-                pair['audio'],
-                output_file,
-                sample_rate=args.sample_rate,
-                n_fft=args.fft_size,
-                feature_type=args.feature_type
-            )
+        # Process audio
+        audio_features = process_audio_file(
+            audio_file, 
+            sample_rate=args.sample_rate,
+            hop_length=args.hop_length,
+            n_cqt_bins=n_cqt_bins
+        )
+        
+        # Convert to tensor and add batch dimension
+        audio_features = torch.FloatTensor(audio_features).unsqueeze(0).to(device)
+        
+        # Get ground truth piano roll
+        ground_truth_midi = pretty_midi.PrettyMIDI(str(midi_file))
+        ground_truth_onsets, ground_truth_offsets, ground_truth_velocities = midi_to_piano_roll(
+            ground_truth_midi,
+            hop_length=args.hop_length,
+            sample_rate=args.sample_rate,
+            roll_length=audio_features.shape[1]
+        )
+        
+        # Convert to tensors
+        ground_truth_onsets = torch.FloatTensor(ground_truth_onsets)
+        ground_truth_offsets = torch.FloatTensor(ground_truth_offsets)
+        ground_truth_velocities = torch.FloatTensor(ground_truth_velocities)
+        
+        # Make predictions
+        with torch.no_grad():
+            pred_onsets, pred_offsets, pred_velocities = model(audio_features)
+        
+        # Convert to numpy
+        pred_onsets = torch.sigmoid(pred_onsets[0]).cpu().numpy()
+        pred_offsets = torch.sigmoid(pred_offsets[0]).cpu().numpy()
+        pred_velocities = pred_velocities[0].cpu().numpy()
+        
+        # Apply threshold to onsets/offsets
+        pred_onsets_binary = pred_onsets > args.onset_threshold
+        pred_offsets_binary = pred_offsets > args.offset_threshold
+        
+        # Calculate metrics
+        # Flatten for sklearn metrics
+        gt_onsets_flat = ground_truth_onsets.numpy().flatten()
+        pred_onsets_flat = pred_onsets_binary.flatten()
+        
+        gt_offsets_flat = ground_truth_offsets.numpy().flatten()
+        pred_offsets_flat = pred_offsets_binary.flatten()
+        
+        # Only evaluate velocity on notes that exist (where onset=1)
+        mask = gt_onsets_flat > 0
+        gt_velocities_masked = ground_truth_velocities.numpy().flatten()[mask] 
+        pred_velocities_masked = pred_velocities.flatten()[mask]
+        
+        # Calculate precision, recall, F1
+        onset_precision, onset_recall, onset_f1, _ = precision_recall_fscore_support(
+            gt_onsets_flat, pred_onsets_flat, average='binary', zero_division=0
+        )
+        
+        offset_precision, offset_recall, offset_f1, _ = precision_recall_fscore_support(
+            gt_offsets_flat, pred_offsets_flat, average='binary', zero_division=0
+        )
+        
+        # Calculate velocity RMSE
+        if len(gt_velocities_masked) > 0:
+            velocity_rmse = np.sqrt(mean_squared_error(gt_velocities_masked, pred_velocities_masked))
+        else:
+            velocity_rmse = float('nan')
+        
+        # Store metrics
+        metrics['onset_precision'].append(onset_precision)
+        metrics['onset_recall'].append(onset_recall)
+        metrics['onset_f1'].append(onset_f1)
+        metrics['offset_precision'].append(offset_precision)
+        metrics['offset_recall'].append(offset_recall)
+        metrics['offset_f1'].append(offset_f1)
+        metrics['velocity_rmse'].append(velocity_rmse)
+        
+        # Print metrics for this file
+        print(f"Onset - Precision: {onset_precision:.4f}, Recall: {onset_recall:.4f}, F1: {onset_f1:.4f}")
+        print(f"Offset - Precision: {offset_precision:.4f}, Recall: {offset_recall:.4f}, F1: {offset_f1:.4f}")
+        print(f"Velocity RMSE: {velocity_rmse:.4f}")
+        
+        # Generate and save piano roll visualizations if requested
+        if args.visualize:
+            plt.figure(figsize=(15, 10))
             
-            # Evaluate transcription
-            metrics = evaluate_transcription(pair['midi'], output_file)
-            metrics['file'] = pair['audio'].stem
-            all_metrics.append(metrics)
+            # Plot ground truth onsets
+            plt.subplot(3, 2, 1)
+            plt.imshow(ground_truth_onsets.numpy().T, aspect='auto', origin='lower', cmap='Blues')
+            plt.title("Ground Truth Onsets")
+            plt.ylabel("MIDI Note")
             
-            # Print metrics for this file
-            print(f"{pair['audio'].stem}: F1={metrics['f1']:.4f}, "
-                  f"Precision={metrics['precision']:.4f}, "
-                  f"Recall={metrics['recall']:.4f}")
+            # Plot predicted onsets
+            plt.subplot(3, 2, 2)
+            plt.imshow(pred_onsets.T, aspect='auto', origin='lower', cmap='Blues')
+            plt.title("Predicted Onsets")
             
-        except Exception as e:
-            print(f"Error processing {pair['audio']}: {e}")
+            # Plot ground truth offsets
+            plt.subplot(3, 2, 3)
+            plt.imshow(ground_truth_offsets.numpy().T, aspect='auto', origin='lower', cmap='Reds')
+            plt.title("Ground Truth Offsets")
+            plt.ylabel("MIDI Note")
+            
+            # Plot predicted offsets
+            plt.subplot(3, 2, 4)
+            plt.imshow(pred_offsets.T, aspect='auto', origin='lower', cmap='Reds')
+            plt.title("Predicted Offsets")
+            
+            # Plot ground truth velocities
+            plt.subplot(3, 2, 5)
+            plt.imshow(ground_truth_velocities.numpy().T, aspect='auto', origin='lower', cmap='Greens')
+            plt.title("Ground Truth Velocities")
+            plt.ylabel("MIDI Note")
+            plt.xlabel("Time (frames)")
+            
+            # Plot predicted velocities
+            plt.subplot(3, 2, 6)
+            plt.imshow(pred_velocities.T, aspect='auto', origin='lower', cmap='Greens')
+            plt.title("Predicted Velocities")
+            plt.xlabel("Time (frames)")
+            
+            plt.tight_layout()
+            plt.savefig(output_dir / f"{audio_file.stem}_piano_roll.png")
+            plt.close()
+            
+            # Generate MIDI from predictions
+            if args.generate_midi:
+                predicted_midi = notes_to_midi(
+                    pred_onsets_binary,
+                    pred_offsets_binary,
+                    pred_velocities,
+                    hop_length=args.hop_length,
+                    sample_rate=args.sample_rate
+                )
+                
+                predicted_midi.write(output_dir / f"{audio_file.stem}_predicted.mid")
     
     # Calculate average metrics
-    avg_metrics = {
-        'precision': np.mean([m['precision'] for m in all_metrics]),
-        'recall': np.mean([m['recall'] for m in all_metrics]),
-        'f1': np.mean([m['f1'] for m in all_metrics]),
-        'accuracy': np.mean([m['accuracy'] for m in all_metrics]),
-        'error_rate': np.mean([m['error_rate'] for m in all_metrics])
-    }
-    
-    # Save all results
-    results = {
-        'avg_metrics': avg_metrics,
-        'all_metrics': all_metrics,
-        'model_path': args.model_path,
-        'feature_type': args.feature_type,
-        'sample_rate': args.sample_rate,
-        'num_files': len(test_pairs)
-    }
-    
-    with open(output_dir / "evaluation_results.json", 'w') as f:
-        json.dump(results, f, indent=2)
+    avg_metrics = {k: np.nanmean(v) for k, v in metrics.items()}
     
     # Print summary
     print("\nEvaluation Summary:")
-    print(f"Number of files: {len(test_pairs)}")
-    print(f"F1 Score: {avg_metrics['f1']:.4f}")
-    print(f"Precision: {avg_metrics['precision']:.4f}")
-    print(f"Recall: {avg_metrics['recall']:.4f}")
-    print(f"Accuracy: {avg_metrics['accuracy']:.4f}")
-    print(f"Error Rate: {avg_metrics['error_rate']:.4f}")
-    print(f"\nResults saved to {output_dir / 'evaluation_results.json'}")
+    print(f"Onset - Precision: {avg_metrics['onset_precision']:.4f}, Recall: {avg_metrics['onset_recall']:.4f}, F1: {avg_metrics['onset_f1']:.4f}")
+    print(f"Offset - Precision: {avg_metrics['offset_precision']:.4f}, Recall: {avg_metrics['offset_recall']:.4f}, F1: {avg_metrics['offset_f1']:.4f}")
+    print(f"Velocity RMSE: {avg_metrics['velocity_rmse']:.4f}")
+    
+    # Save metrics to file
+    with open(output_dir / "evaluation_metrics.txt", "w") as f:
+        f.write("Evaluation Metrics:\n")
+        f.write(f"Onset - Precision: {avg_metrics['onset_precision']:.4f}, Recall: {avg_metrics['onset_recall']:.4f}, F1: {avg_metrics['onset_f1']:.4f}\n")
+        f.write(f"Offset - Precision: {avg_metrics['offset_precision']:.4f}, Recall: {avg_metrics['offset_recall']:.4f}, F1: {avg_metrics['offset_f1']:.4f}\n")
+        f.write(f"Velocity RMSE: {avg_metrics['velocity_rmse']:.4f}\n")
+        
+        f.write("\nDetailed Metrics:\n")
+        for i, (audio_file, midi_file) in enumerate(zip(audio_files, midi_files)):
+            f.write(f"\nFile {i+1}: {audio_file.name}\n")
+            f.write(f"Onset - Precision: {metrics['onset_precision'][i]:.4f}, Recall: {metrics['onset_recall'][i]:.4f}, F1: {metrics['onset_f1'][i]:.4f}\n")
+            f.write(f"Offset - Precision: {metrics['offset_precision'][i]:.4f}, Recall: {metrics['offset_recall'][i]:.4f}, F1: {metrics['offset_f1'][i]:.4f}\n")
+            f.write(f"Velocity RMSE: {metrics['velocity_rmse'][i]:.4f}\n")
+    
+    print(f"Evaluation complete. Results saved to {output_dir}")
+
+def notes_to_midi(onsets, offsets, velocities, hop_length=512, sample_rate=16000):
+    """Convert piano roll matrices to MIDI file"""
+    # Create a PrettyMIDI object
+    midi = pretty_midi.PrettyMIDI()
+    piano = pretty_midi.Instrument(program=0)  # Piano
+    
+    # Frame timing
+    frame_time = hop_length / sample_rate
+    
+    # Iterate through each note (88 piano keys, starting from A0=21)
+    for note_idx in range(88):
+        midi_note = note_idx + 21  # A0 = 21
+        
+        # Find onset frames
+        onset_frames = np.where(onsets[:, note_idx])[0]
+        
+        # For each detected onset
+        for onset_frame in onset_frames:
+            # Find the next offset after this onset
+            offset_frames = np.where(offsets[onset_frame:, note_idx])[0]
+            
+            if len(offset_frames) > 0:
+                # Offset is relative to onset_frame, so add it back
+                offset_frame = offset_frames[0] + onset_frame
+            else:
+                # If no offset found, set to end of song
+                offset_frame = len(onsets) - 1
+            
+            # Convert frames to time
+            start_time = onset_frame * frame_time
+            end_time = offset_frame * frame_time
+            
+            # Ensure note has minimum duration
+            if end_time <= start_time:
+                end_time = start_time + 0.1  # Minimum 100ms note
+            
+            # Get velocity (scale to 0-127 for MIDI)
+            velocity = int(min(max(velocities[onset_frame, note_idx] * 127, 1), 127))
+            
+            # Create note
+            note = pretty_midi.Note(
+                velocity=velocity,
+                pitch=midi_note,
+                start=start_time,
+                end=end_time
+            )
+            
+            # Add note to instrument
+            piano.notes.append(note)
+    
+    # Add the instrument to the PrettyMIDI object
+    midi.instruments.append(piano)
+    return midi
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate piano transcription model')
     
+    # Data and model arguments
     parser.add_argument('--model-path', type=str, required=True,
-                      help='Path to trained model')
+                        help='Path to model checkpoint')
     parser.add_argument('--data-dir', type=str, default='data',
-                      help='Path to data directory')
-    parser.add_argument('--output-dir', type=str, default='evaluation',
-                      help='Path to output directory')
-    parser.add_argument('--feature-type', type=str, default='mel', choices=['mel', 'cqt', 'both'],
-                      help='Feature type for audio representation')
-    parser.add_argument('--sample-rate', type=int, default=16000, choices=[16000, 22050],
-                      help='Audio sample rate')
-    parser.add_argument('--fft-size', type=int, default=2048,
-                      help='FFT window size')
-    parser.add_argument('--max-files', type=int, default=None,
-                      help='Maximum number of files to evaluate')
+                        help='Directory containing test data')
+    parser.add_argument('--output-dir', type=str, default='output/evaluation',
+                        help='Directory to save evaluation results')
+    
+    # Model parameters (used if not found in checkpoint)
+    parser.add_argument('--n-cqt-bins', type=int, default=88,
+                        help='Number of CQT bins')
+    parser.add_argument('--hidden-dim', type=int, default=256,
+                        help='Hidden dimension of the model')
+    parser.add_argument('--num-layers', type=int, default=6,
+                        help='Number of transformer layers')
+    parser.add_argument('--num-heads', type=int, default=8,
+                        help='Number of attention heads')
+    parser.add_argument('--dropout', type=float, default=0.1,
+                        help='Dropout rate')
+    
+    # Audio parameters
+    parser.add_argument('--sample-rate', type=int, default=16000,
+                        help='Audio sample rate')
+    parser.add_argument('--hop-length', type=int, default=512,
+                        help='Hop length for feature extraction')
+    
+    # Evaluation parameters
+    parser.add_argument('--onset-threshold', type=float, default=0.5,
+                        help='Threshold for onset detection')
+    parser.add_argument('--offset-threshold', type=float, default=0.5,
+                        help='Threshold for offset detection')
+    parser.add_argument('--visualize', action='store_true',
+                        help='Generate piano roll visualizations')
+    parser.add_argument('--generate-midi', action='store_true',
+                        help='Generate MIDI files from predictions')
     parser.add_argument('--cpu', action='store_true',
-                      help='Force CPU usage')
+                        help='Force CPU usage even if CUDA is available')
     
     args = parser.parse_args()
-    
     evaluate_model(args)
 
 if __name__ == "__main__":

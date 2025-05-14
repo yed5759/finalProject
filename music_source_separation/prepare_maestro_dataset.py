@@ -22,143 +22,123 @@ def process_audio(input_file, output_file, sample_rate):
     
     return len(audio) / sample_rate  # Return duration in seconds
 
-def prepare_maestro(maestro_dir, output_dir, sample_rate=16000):
+def prepare_maestro_dataset(args):
     """
-    Prepare MAESTRO dataset for training
-    
-    Args:
-        maestro_dir: Path to MAESTRO dataset
-        output_dir: Path to output directory
-        sample_rate: Target sample rate
+    Prepare MAESTRO dataset for training, validation, and testing
+    Works with existing dataset structure in dataset/MAESTRO
     """
-    maestro_dir = Path(maestro_dir)
-    output_dir = Path(output_dir)
+    maestro_dir = Path(args.maestro_dir)
+    output_dir = Path(args.output_dir)
     
     # Create output directories
-    train_audio_dir = output_dir / "train" / "audio"
-    train_midi_dir = output_dir / "train" / "midi"
-    val_audio_dir = output_dir / "val" / "audio"
-    val_midi_dir = output_dir / "val" / "midi"
-    test_audio_dir = output_dir / "test" / "audio"
-    test_midi_dir = output_dir / "test" / "midi"
+    for split in ['train', 'val', 'test']:
+        for subdir in ['audio', 'midi']:
+            os.makedirs(output_dir / split / subdir, exist_ok=True)
     
-    os.makedirs(train_audio_dir, exist_ok=True)
-    os.makedirs(train_midi_dir, exist_ok=True)
-    os.makedirs(val_audio_dir, exist_ok=True)
-    os.makedirs(val_midi_dir, exist_ok=True)
-    os.makedirs(test_audio_dir, exist_ok=True)
-    os.makedirs(test_midi_dir, exist_ok=True)
-    
-    # Load MAESTRO metadata
-    json_path = maestro_dir / "maestro-v3.0.0.json"
-    csv_path = maestro_dir / "maestro-v3.0.0.csv"
-    
-    # Try to load metadata from JSON or CSV
-    if json_path.exists():
-        with open(json_path, 'r') as f:
-            maestro_data = json.load(f)
-            items = maestro_data.get('items', [])
-    elif csv_path.exists():
-        df = pd.read_csv(csv_path)
-        items = df.to_dict('records')
+    # Load metadata
+    metadata_path = maestro_dir / 'maestro-v3.0.0.json'
+    if not metadata_path.exists():
+        metadata_path = maestro_dir / 'maestro-v3.0.0.csv'
+        if not metadata_path.exists():
+            raise FileNotFoundError(f"Could not find MAESTRO metadata at {metadata_path}")
+        metadata = pd.read_csv(metadata_path)
     else:
-        raise FileNotFoundError(f"Could not find metadata file in {maestro_dir}")
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        metadata = pd.DataFrame(metadata['items'])
     
-    # Process files
-    stats = {
-        'train': {'count': 0, 'duration': 0},
-        'validation': {'count': 0, 'duration': 0},
-        'test': {'count': 0, 'duration': 0}
-    }
+    # Group files by split
+    train_files = metadata[metadata['split'] == 'train']
+    validation_files = metadata[metadata['split'] == 'validation']
+    test_files = metadata[metadata['split'] == 'test']
     
-    print(f"Processing MAESTRO dataset with {len(items)} items...")
-    for item in tqdm(items):
-        # Get paths and split
-        audio_filename = item.get('audio_filename') or item.get('audio')
-        midi_filename = item.get('midi_filename') or item.get('midi')
-        split = item.get('split')
+    print(f"Found {len(train_files)} training files, {len(validation_files)} validation files, "
+          f"and {len(test_files)} test files")
+    
+    # Process files by split
+    total_files = 0
+    processed_files = 0
+    
+    for split, files in zip(['train', 'val', 'test'], [train_files, validation_files, test_files]):
+        print(f"Processing {split} files...")
         
-        if not audio_filename or not midi_filename or not split:
-            print(f"Skipping item with missing information: {item}")
-            continue
-        
-        # Handle different path formats
-        audio_path = maestro_dir / audio_filename
-        midi_path = maestro_dir / midi_filename
-        
-        # If paths don't exist, try alternate formats
-        if not audio_path.exists() and '/' in audio_filename:
-            # Path might be relative to MAESTRO root
-            audio_path = maestro_dir / Path(audio_filename)
-        if not midi_path.exists() and '/' in midi_filename:
-            midi_path = maestro_dir / Path(midi_filename)
-        
-        if not audio_path.exists():
-            print(f"Audio file not found: {audio_path}")
-            continue
-        if not midi_path.exists():
-            print(f"MIDI file not found: {midi_path}")
-            continue
-        
-        # Determine output paths
-        if split == 'train':
-            output_audio_dir = train_audio_dir
-            output_midi_dir = train_midi_dir
-        elif split == 'validation':
-            output_audio_dir = val_audio_dir
-            output_midi_dir = val_midi_dir
-        elif split == 'test':
-            output_audio_dir = test_audio_dir
-            output_midi_dir = test_midi_dir
-        else:
-            print(f"Unknown split: {split}, skipping")
-            continue
-        
-        # Generate output filenames
-        output_basename = f"{Path(audio_filename).stem}"
-        output_audio_path = output_audio_dir / f"{output_basename}.wav"
-        output_midi_path = output_midi_dir / f"{output_basename}.mid"
-        
-        # Process audio
-        try:
-            duration = process_audio(audio_path, output_audio_path, sample_rate)
-            # Copy MIDI file
-            shutil.copy2(midi_path, output_midi_path)
+        for _, row in tqdm(files.iterrows(), total=len(files)):
+            audio_filename = row['audio_filename']
+            midi_filename = row['midi_filename']
             
-            # Update stats
-            stats[split]['count'] += 1
-            stats[split]['duration'] += duration
-        except Exception as e:
-            print(f"Error processing {audio_path}: {e}")
+            # Locate files in the existing structure
+            # Example: dataset/MAESTRO/2004/MIDI-Unprocessed_SMF_02_R1_2004_01-05_ORIG_MID--AUDIO_02_R1_2004_05_Track05_wav.midi
+            year = str(row.get('year', audio_filename.split('/')[0]))
+            
+            # Check for different filename formats
+            if os.path.basename(audio_filename).endswith('.wav'):
+                audio_id = os.path.basename(audio_filename).replace('.wav', '')
+            else:
+                audio_id = os.path.basename(audio_filename)
+            
+            # Find the audio file in the dataset structure
+            source_audio = None
+            source_midi = None
+            
+            # Try to find the audio file with exact path
+            if (maestro_dir / audio_filename).exists():
+                source_audio = maestro_dir / audio_filename
+            else:
+                # Try to find by year and filename
+                year_dir = maestro_dir / year
+                if year_dir.exists():
+                    for file in year_dir.glob('*.wav'):
+                        if audio_id in file.stem:
+                            source_audio = file
+                            break
+            
+            # Try to find the MIDI file with exact path
+            if (maestro_dir / midi_filename).exists():
+                source_midi = maestro_dir / midi_filename
+            else:
+                # Try to find by year and similar name
+                year_dir = maestro_dir / year
+                if year_dir.exists():
+                    for file in year_dir.glob('*.mid*'):
+                        if audio_id.replace('_wav', '') in file.stem:
+                            source_midi = file
+                            break
+            
+            total_files += 1
+            
+            # Skip if files not found
+            if source_audio is None or source_midi is None:
+                print(f"Could not find files for {audio_id}")
+                continue
+            
+            # Resample audio if needed
+            target_audio = output_dir / split / 'audio' / f"{audio_id}.wav"
+            if args.sample_rate != 44100:
+                audio, _ = librosa.load(source_audio, sr=args.sample_rate, mono=True)
+                sf.write(target_audio, audio, args.sample_rate)
+            else:
+                shutil.copy(source_audio, target_audio)
+            
+            # Copy MIDI file
+            target_midi = output_dir / split / 'midi' / f"{audio_id}.mid"
+            shutil.copy(source_midi, target_midi)
+            
+            processed_files += 1
     
-    # Print statistics
-    print("\nDataset Statistics:")
-    for split, data in stats.items():
-        hours = data['duration'] / 3600
-        print(f"{split}: {data['count']} files, {hours:.2f} hours")
-    
-    # Create a summary file
-    with open(output_dir / "dataset_info.json", 'w') as f:
-        json.dump({
-            'stats': stats,
-            'sample_rate': sample_rate,
-            'prepare_date': pd.Timestamp.now().isoformat()
-        }, f, indent=2)
-    
-    print(f"\nMAESTRO dataset prepared successfully in {output_dir}")
+    print(f"Dataset preparation complete. Processed {processed_files}/{total_files} files.")
+    print(f"Data saved to {output_dir}")
 
 def main():
     parser = argparse.ArgumentParser(description='Prepare MAESTRO dataset for piano transcription')
-    parser.add_argument('--maestro-dir', type=str, required=True, 
-                      help='Path to MAESTRO dataset')
+    parser.add_argument('--maestro-dir', type=str, default='dataset/MAESTRO',
+                      help='Path to MAESTRO dataset directory')
     parser.add_argument('--output-dir', type=str, default='data',
-                      help='Path to output directory')
-    parser.add_argument('--sample-rate', type=int, default=16000, choices=[16000, 22050],
-                      help='Target sample rate')
+                      help='Output directory')
+    parser.add_argument('--sample-rate', type=int, default=16000, choices=[16000, 22050, 44100],
+                      help='Target sample rate for audio files')
     
     args = parser.parse_args()
-    
-    prepare_maestro(args.maestro_dir, args.output_dir, args.sample_rate)
+    prepare_maestro_dataset(args)
 
 if __name__ == "__main__":
     main() 

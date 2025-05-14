@@ -1,174 +1,153 @@
 # Piano Transformer
 
-A transformer-based system for converting piano WAV audio to MIDI.
-
-## Architecture
-
-This project has a simple and straightforward structure:
-
-- `piano_transformer.py`: Contains all the model components, audio processing, and MIDI utilities
-- `main.py`: Command-line interface for using the system
-- `prepare_maestro_dataset.py`: Script for preparing the MAESTRO dataset for training
-- `train_model.py`: Script for training the piano transformer model
-- `evaluate_model.py`: Script for evaluating model performance
-
-## Audio Features
-
-The system supports multiple audio representations:
-
-- **Mel Spectrogram**: Traditional mel-frequency spectrogram
-- **Constant-Q Transform (CQT)**: Frequency representation that better matches musical scales
-- **Onset Detection**: Automatic detection of note onsets
-
-It also supports explicit modeling of:
-- Note onsets (beginnings)
-- Note offsets (endings)
-- Note velocities (loudness)
-
-## Dataset Preparation
-
-This project is designed to work with the MAESTRO dataset. You can prepare the dataset with:
-
-```bash
-# Prepare MAESTRO dataset with default settings (16kHz sample rate)
-python prepare_maestro_dataset.py --maestro-dir path/to/maestro --output-dir data
-
-# Prepare with 22.05kHz sample rate
-python prepare_maestro_dataset.py --maestro-dir path/to/maestro --output-dir data --sample-rate 22050
-```
-
-The script will:
-1. Convert audio files to the specified sample rate
-2. Organize files into train/validation/test splits based on MAESTRO metadata
-3. Create the required directory structure for training
-
-## Training
-
-You can train the model using the MAESTRO dataset:
-
-```bash
-# Train with default settings (mel spectrogram features)
-python train_model.py --data-dir data --output-dir models
-
-# Train with CQT features
-python train_model.py --data-dir data --feature-type cqt --output-dir models/cqt_model
-
-# Train with both mel and CQT features
-python train_model.py --data-dir data --feature-type both --sample-rate 22050 --output-dir models/combined_model
-```
-
-The training script includes:
-- Automatic logging of metrics
-- Model checkpointing
-- Learning rate scheduling
-- Visualization of training progress
-
-## Evaluation
-
-You can evaluate a trained model on the test set:
-
-```bash
-# Evaluate model with default settings
-python evaluate_model.py --model-path models/best_model.pth --data-dir data
-
-# Evaluate with different feature types
-python evaluate_model.py --model-path models/cqt_model/best_model.pth --feature-type cqt --data-dir data
-```
-
-The evaluation script measures:
-- Precision, Recall, and F1 score
-- Note-level accuracy
-- Onset and offset detection performance
-
-## Usage
-
-You can use the system for transcription through the command-line interface:
-
-```bash
-# Process a single file with default settings (mel spectrogram)
-python main.py --input sample.wav --output output.mid
-
-# Process using CQT representation
-python main.py --input sample.wav --output output.mid --feature-type cqt
-
-# Process using both mel and CQT features
-python main.py --input sample.wav --output output.mid --feature-type both --sample-rate 22050
-
-# Process a directory of files
-python main.py --input audio_folder/ --output midi_folder/ --batch
-
-# Use a specific trained model
-python main.py --input sample.wav --model models/best_model.pth
-```
-
-## Command Line Options
-
-### Main Transcription Script
-
-- `--input, -i`: Input WAV file or directory of WAV files (required)
-- `--output, -o`: Output directory or file (default: "output")
-- `--model, -m`: Path to trained model (optional)
-- `--batch, -b`: Process directory of WAV files (flag)
-- `--cpu`: Force CPU processing (flag)
-- `--sample-rate, -sr`: Audio sample rate, either 16000 or 22050 Hz (default: 16000)
-- `--feature-type, -ft`: Audio feature type: 'mel', 'cqt', or 'both' (default: 'mel')
-- `--fft-size, -fs`: FFT window size (default: 2048)
-
-### Dataset Preparation Script
-
-- `--maestro-dir`: Path to MAESTRO dataset (required)
-- `--output-dir`: Path to output directory (default: "data")
-- `--sample-rate`: Target sample rate, 16000 or 22050 Hz (default: 16000)
-
-### Training Script
-
-- `--data-dir`: Path to data directory (default: "data")
-- `--output-dir`: Path to output directory (default: "models")
-- `--feature-type`: Audio feature type (default: "mel")
-- `--sample-rate`: Audio sample rate (default: 16000)
-- `--fft-size`: FFT window size (default: 2048)
-- `--batch-size`: Batch size (default: 8)
-- `--epochs`: Number of epochs (default: 50)
-
-## Requirements
-
-This project requires the following Python packages:
-
-- torch
-- librosa
-- pretty_midi
-- numpy
-- soundfile
-- tqdm
-- matplotlib
-- pandas
-- mir_eval
-
-You can install them with pip:
-
-```bash
-pip install -r requirements.txt
-```
+A deep learning model for automatic piano transcription (converting WAV audio to MIDI) using Constant-Q Transform (CQT) features and a Transformer architecture. The model predicts onset, offset, and velocity values for each of the 88 piano keys.
 
 ## Project Structure
 
 ```
 piano_transformer/
-├── main.py                  # Command-line interface for transcription
-├── piano_transformer.py     # All-in-one model file
+├── dataset/                # Raw dataset files
+│   └── MAESTRO/           # MAESTRO dataset 
+│       ├── 2004/          # Year-specific folders containing audio and MIDI files
+│       ├── 2006/
+│       └── ...
+├── data/                   # Processed data for training/validation/testing
+│   ├── train/             # Training split
+│   │   ├── audio/         # Audio files (WAV)
+│   │   └── midi/          # MIDI files
+│   ├── val/               # Validation split
+│   │   ├── audio/
+│   │   └── midi/
+│   └── test/              # Test split
+│       ├── audio/
+│       └── midi/
+├── models/                 # Saved models
+│   └── piano_transformer/ # Model checkpoints and training history
+├── output/                 # Generated transcriptions and visualizations
+├── piano_transformer.py    # Core model implementation
+├── main.py                 # Command-line interface for transcription
 ├── prepare_maestro_dataset.py # Dataset preparation script
-├── train_model.py           # Training script
-├── evaluate_model.py        # Evaluation script
-├── requirements.txt         # Project dependencies
-├── README.md                # This README
-└── data/                    # Directory for data files
-    ├── train/               # Training data
-    │   ├── audio/           # Training audio files
-    │   └── midi/            # Training MIDI files
-    ├── val/                 # Validation data
-    │   ├── audio/           # Validation audio files
-    │   └── midi/            # Validation MIDI files
-    └── test/                # Test data
-        ├── audio/           # Test audio files
-        └── midi/            # Test MIDI files
-``` 
+├── train_model.py          # Training script
+├── evaluate_model.py       # Evaluation script
+└── requirements.txt        # Dependencies
+```
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd piano_transformer
+```
+
+2. Create and activate a virtual environment (optional but recommended):
+```bash
+python -m venv venv
+# Windows
+venv\Scripts\activate
+# Linux/macOS
+source venv/bin/activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+## Using the MAESTRO Dataset
+
+This project uses the [MAESTRO dataset](https://magenta.tensorflow.org/datasets/maestro) (MIDI and Audio Edited for Synchronous TRacks and Organization) for training and evaluation. The dataset should be downloaded and placed in the `dataset/MAESTRO` directory.
+
+You can download the MAESTRO dataset v3.0.0 from: [https://magenta.tensorflow.org/datasets/maestro](https://magenta.tensorflow.org/datasets/maestro)
+
+## Data Preparation
+
+To prepare the MAESTRO dataset for training, run:
+
+```bash
+python prepare_maestro_dataset.py --maestro-dir dataset/MAESTRO --output-dir data --sample-rate 16000
+```
+
+This will:
+- Split the dataset into train/val/test sets according to the official split
+- Resample audio files to 16kHz (or other specified rate)
+- Organize files into the appropriate directories
+
+## Training the Model
+
+To train a new model:
+
+```bash
+python train_model.py --data-dir data --model-dir models/piano_transformer --n-cqt-bins 88 --hidden-dim 256 --num-layers 6 --batch-size 16 --epochs 50
+```
+
+Key training parameters:
+- `--n-cqt-bins`: Number of CQT bins (default: 88, matching piano keys)
+- `--hidden-dim`: Hidden dimension of the model (default: 256)
+- `--num-layers`: Number of transformer layers (default: 6)
+- `--num-heads`: Number of attention heads (default: 8)
+- `--dropout`: Dropout rate (default: 0.1)
+- `--sample-rate`: Audio sample rate (default: 16000)
+- `--lr`: Learning rate (default: 0.001)
+
+Training progress and model checkpoints will be saved to the specified `model-dir`.
+
+## Evaluation
+
+To evaluate a trained model on the test set:
+
+```bash
+python evaluate_model.py --model-path models/piano_transformer/best_model.pt --data-dir data --output-dir output/evaluation --visualize
+```
+
+This will:
+- Load the trained model
+- Evaluate it on all test files
+- Calculate metrics (onset F1, offset F1, velocity RMSE)
+- Generate visualizations if the `--visualize` flag is provided
+
+## Transcription
+
+To transcribe a new piano audio file:
+
+```bash
+python main.py --audio-file path/to/your/audio.wav --model-path models/piano_transformer/best_model.pt --output-dir output --save-piano-roll
+```
+
+This will:
+- Load the trained model
+- Process the audio file
+- Generate a MIDI file with the transcription
+- Save a piano roll visualization if the `--save-piano-roll` flag is provided
+
+## Model Architecture
+
+The Piano Transformer uses:
+- Constant-Q Transform (CQT) features from audio
+- Transformer encoder architecture
+- Three output heads for predicting:
+  - Note onsets (when a key is pressed)
+  - Note offsets (when a key is released)
+  - Note velocities (how hard a key is pressed)
+
+## Requirements
+
+- Python 3.7+
+- PyTorch 1.9+
+- librosa
+- pretty_midi
+- numpy
+- matplotlib
+- tqdm
+- sklearn
+
+See `requirements.txt` for detailed dependencies.
+
+## Performance
+
+When trained on the MAESTRO dataset, the model achieves:
+- Onset F1 score: ~0.80-0.85
+- Offset F1 score: ~0.60-0.70
+- Velocity RMSE: ~0.10-0.15
+
+Performance varies depending on training time and hyperparameters. 

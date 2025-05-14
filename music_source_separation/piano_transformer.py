@@ -113,24 +113,6 @@ def load_audio(file_path, sample_rate=16000):
     audio, sr = librosa.load(file_path, sr=sample_rate, mono=True)
     return audio, sr
 
-def extract_mel_features(audio, sr, n_fft=2048, hop_length=512, n_mels=128):
-    """
-    Extract mel spectrogram features from audio
-    """
-    # Extract mel spectrogram
-    mel_spectrogram = librosa.feature.melspectrogram(
-        y=audio, 
-        sr=sr, 
-        n_fft=n_fft,
-        hop_length=hop_length,
-        n_mels=n_mels
-    )
-    
-    # Convert to log scale
-    mel_spectrogram = librosa.power_to_db(mel_spectrogram, ref=np.max)
-    
-    return mel_spectrogram
-
 def extract_cqt_features(audio, sr, hop_length=512, n_bins=84, bins_per_octave=12, fmin=librosa.note_to_hz('A0')):
     """
     Extract Constant-Q Transform (CQT) features from audio
@@ -188,17 +170,15 @@ def normalize_features(features):
     return normalized_features
 
 def preprocess_audio(file_path, sample_rate=16000, n_fft=2048, hop_length=512, 
-                    feature_type='mel', n_mels=128, n_cqt_bins=84):
+                    n_cqt_bins=84):
     """
-    Full preprocessing pipeline for audio files
+    Full preprocessing pipeline for audio files using only CQT
     
     Args:
         file_path: Path to audio file
         sample_rate: Target sample rate (16000 or 22050 recommended)
         n_fft: FFT window size
         hop_length: Hop length for FFT
-        feature_type: Type of features to extract ('mel', 'cqt', or 'both')
-        n_mels: Number of mel bands
         n_cqt_bins: Number of CQT bins
         
     Returns:
@@ -211,37 +191,27 @@ def preprocess_audio(file_path, sample_rate=16000, n_fft=2048, hop_length=512,
     # Calculate audio length in seconds
     audio_length = len(audio) / sr
     
-    # Extract onset information
+    # Extract onset information (for onset detection)
     onsets, onset_env = extract_onset_features(audio, sr, n_fft, hop_length)
     
-    # Extract spectral features based on specified type
-    if feature_type == 'mel':
-        spectral_features = extract_mel_features(audio, sr, n_fft, hop_length, n_mels)
-        features = spectral_features
-    elif feature_type == 'cqt':
-        spectral_features = extract_cqt_features(audio, sr, hop_length, n_cqt_bins)
-        features = spectral_features
-    elif feature_type == 'both':
-        mel_features = extract_mel_features(audio, sr, n_fft, hop_length, n_mels)
-        cqt_features = extract_cqt_features(audio, sr, hop_length, n_cqt_bins)
-        
-        # Stack the features
-        features = np.vstack([mel_features, cqt_features])
-    else:
-        raise ValueError(f"Unknown feature type: {feature_type}. Use 'mel', 'cqt', or 'both'")
+    # Extract CQT features
+    cqt_features = extract_cqt_features(audio, sr, hop_length, n_cqt_bins)
     
-    # Add onset information as additional row in features
-    onset_env = onset_env.reshape(1, -1)
-    if len(onset_env[0]) < features.shape[1]:
-        # Pad if necessary
-        padded_onset = np.pad(onset_env, ((0, 0), (0, features.shape[1] - len(onset_env[0]))))
-        features = np.vstack([features, padded_onset])
-    elif len(onset_env[0]) > features.shape[1]:
-        # Truncate if necessary
-        onset_env = onset_env[:, :features.shape[1]]
-        features = np.vstack([features, onset_env])
-    else:
-        features = np.vstack([features, onset_env])
+    # Compute offset detection features (negative of onset detection)
+    offset_env = -np.diff(onset_env, append=0)
+    offset_env = np.maximum(0, offset_env)
+    
+    # Compute velocity information (using RMSE as a proxy for velocity)
+    rms = librosa.feature.rms(y=audio, frame_length=n_fft, hop_length=hop_length)[0]
+    velocity = librosa.util.normalize(rms) 
+    
+    # Stack all features
+    features = np.vstack([
+        cqt_features,               # CQT bins
+        onset_env.reshape(1, -1),   # Onset detection
+        offset_env.reshape(1, -1),  # Offset detection
+        velocity.reshape(1, -1)     # Velocity information
+    ])
     
     # Normalize features
     features = normalize_features(features)
@@ -251,13 +221,13 @@ def preprocess_audio(file_path, sample_rate=16000, n_fft=2048, hop_length=512,
 # ===== MIDI Utilities =====
 
 def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5, 
-                                offset_threshold=0.3, velocity_scale=100,
+                                offset_threshold=0.5, velocity_scale=100,
                                 min_note_length=3, tempo=120.0, hop_time=0.01):
     """
-    Convert model predictions to a MIDI file with onset, offset and velocity
+    Convert model predictions to a MIDI file using onset-offset-velocity representation
     
     Args:
-        predictions: Model predictions with shape (time_steps, pitch_bins)
+        predictions: Model predictions with shape (time_steps, pitch_bins*3)
         output_file: Output MIDI file path
         onset_threshold: Threshold for detecting note onsets
         offset_threshold: Threshold for detecting note offsets
@@ -272,86 +242,94 @@ def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5,
     # Create a piano instrument
     piano = pretty_midi.Instrument(program=0, is_drum=False, name="Piano")
     
-    # Split predictions if we have multi-task outputs
-    if predictions.shape[1] > 88 and predictions.shape[1] % 88 == 0:
-        num_outputs = predictions.shape[1] // 88
-        # Assume first 88 are frame activations, second 88 are onsets, third could be offsets or velocities
-        frame_predictions = predictions[:, :88]
-        
-        if num_outputs >= 2:
-            onset_predictions = predictions[:, 88:176]
-        else:
-            # Calculate the difference to detect onsets
-            onset_predictions = np.zeros_like(frame_predictions)
-            onset_predictions[1:] = frame_predictions[1:] - frame_predictions[:-1]
-            onset_predictions = np.maximum(0, onset_predictions)
-        
-        if num_outputs >= 3:
-            offset_predictions = predictions[:, 176:264]
-        else:
-            # Calculate the negative difference to detect offsets
-            offset_predictions = np.zeros_like(frame_predictions)
-            offset_predictions[:-1] = frame_predictions[:-1] - frame_predictions[1:]
-            offset_predictions = np.maximum(0, offset_predictions)
-        
-        if num_outputs >= 4:
-            velocity_predictions = predictions[:, 264:352]
-        else:
-            # Use frame activation as a proxy for velocity
-            velocity_predictions = frame_predictions
+    # Split predictions into onset, offset and velocity components
+    # Each component has 88 dimensions (one per piano key)
+    num_pitches = 88
+    
+    # Handle both multi-task and single-task outputs
+    if predictions.shape[1] == num_pitches * 3:
+        # Multi-task output: [onset, offset, velocity] for each pitch
+        onset_predictions = predictions[:, :num_pitches]
+        offset_predictions = predictions[:, num_pitches:2*num_pitches]
+        velocity_predictions = predictions[:, 2*num_pitches:3*num_pitches]
     else:
-        # Just frame activations, derive everything else
+        # Single-task output: treat as frame activation and derive onset/offset
         frame_predictions = predictions
         
-        # Calculate the difference to detect onsets
+        # Derive onset predictions
         onset_predictions = np.zeros_like(frame_predictions)
-        onset_predictions[1:] = frame_predictions[1:] - frame_predictions[:-1]
-        onset_predictions = np.maximum(0, onset_predictions)
+        onset_predictions[1:] = np.maximum(0, frame_predictions[1:] - frame_predictions[:-1])
         
-        # Use frame activation as a proxy for velocity
+        # Derive offset predictions
+        offset_predictions = np.zeros_like(frame_predictions)
+        offset_predictions[:-1] = np.maximum(0, frame_predictions[:-1] - frame_predictions[1:])
+        
+        # Use frame activations as velocity
         velocity_predictions = frame_predictions
     
-    # Iterate through time steps and pitches
-    for pitch in range(88):  # 88 keys on a piano
-        note_start = None
-        max_velocity = 0
+    # Track active notes for each pitch
+    active_notes = {}  # {pitch: (start_time, velocity)}
+    
+    # Process each frame for note events
+    for frame in range(len(onset_predictions)):
+        frame_time = frame * hop_time
         
-        # Go through all time steps
-        for frame in range(len(frame_predictions)):
+        # Check for note onsets
+        for pitch in range(num_pitches):
             # Note onset detected
-            if onset_predictions[frame, pitch] > onset_threshold and frame_predictions[frame, pitch] > 0.1:
-                if note_start is None:
-                    note_start = frame
-                    max_velocity = velocity_predictions[frame, pitch]
-                else:
-                    # If we detect another onset while a note is active, treat it as a new note
-                    # Store the current note first
-                    note_end = frame
-                    if note_end - note_start >= min_note_length:
-                        add_note_to_piano(piano, note_start, note_end, pitch, max_velocity, hop_time, velocity_scale)
-                    
-                    # Start a new note
-                    note_start = frame
-                    max_velocity = velocity_predictions[frame, pitch]
-            
-            # Update maximum velocity if needed
-            elif note_start is not None and velocity_predictions[frame, pitch] > max_velocity:
-                max_velocity = velocity_predictions[frame, pitch]
+            if onset_predictions[frame, pitch] > onset_threshold:
+                # Store onset information
+                velocity_value = velocity_predictions[frame, pitch]
+                active_notes[pitch] = (frame_time, velocity_value)
             
             # Note offset detected
-            elif note_start is not None and (frame_predictions[frame, pitch] < offset_threshold or 
-                                           (num_outputs >= 3 and offset_predictions[frame, pitch] > offset_threshold)):
-                note_end = frame
-                if note_end - note_start >= min_note_length:
-                    add_note_to_piano(piano, note_start, note_end, pitch, max_velocity, hop_time, velocity_scale)
-                note_start = None
-                max_velocity = 0
+            elif pitch in active_notes and offset_predictions[frame, pitch] > offset_threshold:
+                # Get onset information
+                start_time, velocity_value = active_notes[pitch]
+                
+                # Calculate duration
+                duration = frame_time - start_time
+                
+                # Only add note if it's long enough
+                if duration >= min_note_length * hop_time:
+                    # Scale velocity to MIDI range (0-127)
+                    velocity = max(1, min(127, int(velocity_value * velocity_scale)))
+                    
+                    # Create MIDI note
+                    note = pretty_midi.Note(
+                        velocity=velocity,
+                        pitch=pitch + 21,  # MIDI pitches start at 21 (A0)
+                        start=start_time,
+                        end=frame_time
+                    )
+                    
+                    # Add to piano
+                    piano.notes.append(note)
+                
+                # Remove from active notes
+                del active_notes[pitch]
+    
+    # Handle notes that are still active at the end
+    end_time = len(onset_predictions) * hop_time
+    for pitch, (start_time, velocity_value) in active_notes.items():
+        # Calculate duration
+        duration = end_time - start_time
         
-        # Handle notes that are active until the end
-        if note_start is not None:
-            note_end = len(frame_predictions)
-            if note_end - note_start >= min_note_length:
-                add_note_to_piano(piano, note_start, note_end, pitch, max_velocity, hop_time, velocity_scale)
+        # Only add note if it's long enough
+        if duration >= min_note_length * hop_time:
+            # Scale velocity to MIDI range (0-127)
+            velocity = max(1, min(127, int(velocity_value * velocity_scale)))
+            
+            # Create MIDI note
+            note = pretty_midi.Note(
+                velocity=velocity,
+                pitch=pitch + 21,  # MIDI pitches start at 21 (A0)
+                start=start_time,
+                end=end_time
+            )
+            
+            # Add to piano
+            piano.notes.append(note)
     
     # Add the instrument to the PrettyMIDI object
     midi_data.instruments.append(piano)
@@ -360,29 +338,6 @@ def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5,
     midi_data.write(output_file)
     
     return midi_data
-
-def add_note_to_piano(piano, start_frame, end_frame, pitch, velocity_value, hop_time, velocity_scale):
-    """Helper function to add a note to the piano instrument"""
-    # Calculate start and end times in seconds
-    start_time = start_frame * hop_time
-    end_time = end_frame * hop_time
-    
-    # MIDI pitches typically start at 21 (A0)
-    midi_pitch = pitch + 21
-    
-    # Scale velocity to MIDI range (0-127)
-    velocity = max(1, min(127, int(velocity_value * velocity_scale)))
-    
-    # Create a Note object
-    note = pretty_midi.Note(
-        velocity=velocity,
-        pitch=midi_pitch,
-        start=start_time,
-        end=end_time
-    )
-    
-    # Add it to our instrument
-    piano.notes.append(note)
 
 # ===== Transcription System =====
 
@@ -400,8 +355,11 @@ class PianoTranscriptionSystem:
         """
         self.device = device
         
-        # Create model
-        self.model = PianoTransformer().to(device)
+        # Create model with appropriate output dimensions for onset, offset, and velocity
+        self.model = PianoTransformer(
+            input_dim=84+3,  # CQT bins + onset + offset + velocity
+            output_dim=88*3  # 88 keys * 3 tasks (onset, offset, velocity)
+        ).to(device)
         
         # Load pretrained model if path is provided
         if model_path and os.path.exists(model_path):
@@ -411,8 +369,7 @@ class PianoTranscriptionSystem:
         self.model.eval()
     
     def transcribe(self, audio_file, output_midi_file, sample_rate=16000, 
-                   n_fft=2048, hop_length=512, feature_type='mel', 
-                   n_mels=128, n_cqt_bins=84):
+                   n_fft=2048, hop_length=512, n_cqt_bins=84):
         """
         Transcribe audio file to MIDI
         
@@ -422,8 +379,6 @@ class PianoTranscriptionSystem:
             sample_rate: Sample rate (16000 or 22050 recommended)
             n_fft: FFT window size (default: 2048)
             hop_length: Hop length
-            feature_type: Type of features to extract ('mel', 'cqt', or 'both')
-            n_mels: Number of mel bands
             n_cqt_bins: Number of CQT bins
             
         Returns:
@@ -435,8 +390,6 @@ class PianoTranscriptionSystem:
             sample_rate=sample_rate,
             n_fft=n_fft,
             hop_length=hop_length,
-            feature_type=feature_type,
-            n_mels=n_mels,
             n_cqt_bins=n_cqt_bins
         )
         
