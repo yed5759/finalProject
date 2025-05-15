@@ -1,9 +1,12 @@
+# utils/auth.py
+
 import os
 import requests
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
 
 # Exchange code for tokens
 def exchange_code_for_tokens(code):
@@ -34,5 +37,4 @@ def exchange_code_for_tokens(code):
     if response.status_code != 200:
         return None, response.text
 
-    tokens = response.json()
-    return tokens, None
+    return response.json(), None
