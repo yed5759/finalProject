@@ -13,8 +13,13 @@ from pathlib import Path
 from piano_transformer import PianoTransformer, process_audio_file, notes_to_midi
 
 def transcribe_audio(args):
-    device = torch.device('cuda' if torch.cuda.is_available() and not args.cpu else 'cpu')
-    print(f"Using device: {device}")
+    # Set device
+    if torch.cuda.is_available() and not args.cpu:
+        device = torch.device('cuda')
+        print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device('cpu')
+        print("Using CPU")
     
     # Load model
     model_path = Path(args.model_path)

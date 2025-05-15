@@ -163,8 +163,16 @@ class PianoDataset(Dataset):
 
 def train_model(args):
     """Train the piano transformer model"""
-    device = torch.device('cuda' if torch.cuda.is_available() and not args.cpu else 'cpu')
-    print(f"Using device: {device}")
+    # Set device
+    if torch.cuda.is_available() and not args.cpu:
+        device = torch.device('cuda')
+        print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+        # Set deterministic behavior for reproducibility, if needed
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    else:
+        device = torch.device('cpu')
+        print("Using CPU")
     
     # Create model directory
     model_dir = Path(args.model_dir)
@@ -180,7 +188,7 @@ def train_model(args):
     ).to(device)
     
     print(model)
-    print(f"Total parameters: {sum(p.nuget() for p in model.parameters() if p.requires_grad)}")
+    print(f"Total parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     
     # Create datasets
     train_dataset = PianoTranscriptionDataset(
@@ -229,9 +237,30 @@ def train_model(args):
     )
     
     # Define loss function for onset, offset, and velocity
-    onset_loss_fn = torch.nn.BCEWithLogitsLoss()
-    offset_loss_fn = torch.nn.BCEWithLogitsLoss()
+    # Add class weighting for onset and offset detection to handle class imbalance
+    # Positive examples (actual notes) are much rarer than negative examples
+    # We use a high positive weight to make the model pay more attention to actual notes
+    pos_weight_onset = torch.tensor([args.onset_pos_weight]).to(device)
+    pos_weight_offset = torch.tensor([args.offset_pos_weight]).to(device)
+    
+    onset_loss_fn = torch.nn.BCELoss(weight=pos_weight_onset)
+    offset_loss_fn = torch.nn.BCELoss(weight=pos_weight_offset)
     velocity_loss_fn = torch.nn.MSELoss()
+    
+    # Function to monitor prediction statistics during training
+    def calculate_prediction_stats(pred_tensor, threshold=0.5):
+        """Calculate statistics about model predictions to monitor training progress"""
+        with torch.no_grad():
+            binary_preds = (pred_tensor > threshold).float()
+            stats = {
+                'min': pred_tensor.min().item(),
+                'max': pred_tensor.max().item(),
+                'mean': pred_tensor.mean().item(),
+                'median': pred_tensor.median().item(),
+                'percent_positive': binary_preds.mean().item() * 100,
+                'num_positive': binary_preds.sum().item()
+            }
+        return stats
     
     # Training and validation history
     history = {
@@ -258,8 +287,10 @@ def train_model(args):
         train_onset_losses = []
         train_offset_losses = []
         train_velocity_losses = []
+        train_activation_losses = []
         
         for batch in tqdm(train_loader, desc="Training"):
+            # Move data to device and ensure it's the right type
             audio_features, target_onsets, target_offsets, target_velocities = [x.to(device) for x in batch]
             
             # Forward pass
@@ -270,11 +301,28 @@ def train_model(args):
             offset_loss = offset_loss_fn(pred_offsets, target_offsets)
             velocity_loss = velocity_loss_fn(pred_velocities * target_onsets, target_velocities * target_onsets)
             
+            # Add activation target loss - encourages predictions to be higher overall
+            # This helps combat the model's tendency to predict all zeros
+            min_activation_target = args.min_activation_target
+            activation_loss_onset = torch.nn.functional.mse_loss(
+                pred_onsets.mean(), 
+                torch.tensor(min_activation_target, device=device)
+            )
+            activation_loss_offset = torch.nn.functional.mse_loss(
+                pred_offsets.mean(), 
+                torch.tensor(min_activation_target, device=device)
+            )
+            activation_loss = activation_loss_onset + activation_loss_offset
+            
             # Combined loss (weighted sum)
             loss = args.onset_weight * onset_loss + args.offset_weight * offset_loss + args.velocity_weight * velocity_loss
             
+            # Add activation loss with its weight
+            if args.activation_loss_weight > 0:
+                loss = loss + args.activation_loss_weight * activation_loss
+            
             # Backward pass and optimization
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)  # More efficient than just zero_grad()
             loss.backward()
             
             # Gradient clipping
@@ -287,11 +335,25 @@ def train_model(args):
             train_onset_losses.append(onset_loss.item())
             train_offset_losses.append(offset_loss.item())
             train_velocity_losses.append(velocity_loss.item())
+            train_activation_losses.append(activation_loss.item())
+            
+            # Free up memory
+            del audio_features, target_onsets, target_offsets, target_velocities
+            del loss, onset_loss, offset_loss, velocity_loss
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         
         train_loss = np.mean(train_losses)
         train_onset_loss = np.mean(train_onset_losses)
         train_offset_loss = np.mean(train_offset_losses)
         train_velocity_loss = np.mean(train_velocity_losses)
+        train_activation_loss = np.mean(train_activation_losses)
+        
+        # Monitor prediction statistics on last training batch
+        onset_stats = calculate_prediction_stats(pred_onsets, threshold=0.5)
+        offset_stats = calculate_prediction_stats(pred_offsets, threshold=0.5)
+        print(f"Training Onset Stats: min={onset_stats['min']:.4f}, max={onset_stats['max']:.4f}, mean={onset_stats['mean']:.4f}, % positive={onset_stats['percent_positive']:.2f}%")
+        print(f"Training Offset Stats: min={offset_stats['min']:.4f}, max={offset_stats['max']:.4f}, mean={offset_stats['mean']:.4f}, % positive={offset_stats['percent_positive']:.2f}%")
         
         # Validation
         model.eval()
@@ -299,9 +361,11 @@ def train_model(args):
         val_onset_losses = []
         val_offset_losses = []
         val_velocity_losses = []
+        val_activation_losses = []
         
         with torch.no_grad():
             for batch in tqdm(val_loader, desc="Validation"):
+                # Move data to device and ensure it's the right type
                 audio_features, target_onsets, target_offsets, target_velocities = [x.to(device) for x in batch]
                 
                 # Forward pass
@@ -312,19 +376,52 @@ def train_model(args):
                 offset_loss = offset_loss_fn(pred_offsets, target_offsets)
                 velocity_loss = velocity_loss_fn(pred_velocities * target_onsets, target_velocities * target_onsets)
                 
+                # Add activation target loss - encourages predictions to be higher overall
+                # This helps combat the model's tendency to predict all zeros
+                min_activation_target = args.min_activation_target
+                activation_loss_onset = torch.nn.functional.mse_loss(
+                    pred_onsets.mean(), 
+                    torch.tensor(min_activation_target, device=device)
+                )
+                activation_loss_offset = torch.nn.functional.mse_loss(
+                    pred_offsets.mean(), 
+                    torch.tensor(min_activation_target, device=device)
+                )
+                activation_loss = activation_loss_onset + activation_loss_offset
+                
                 # Combined loss
                 loss = args.onset_weight * onset_loss + args.offset_weight * offset_loss + args.velocity_weight * velocity_loss
+                
+                # Add activation loss with its weight
+                if args.activation_loss_weight > 0:
+                    loss = loss + args.activation_loss_weight * activation_loss
                 
                 # Record losses
                 val_losses.append(loss.item())
                 val_onset_losses.append(onset_loss.item())
                 val_offset_losses.append(offset_loss.item())
                 val_velocity_losses.append(velocity_loss.item())
+                val_activation_losses.append(activation_loss.item())
+                
+                # Free up memory
+                del audio_features, target_onsets, target_offsets, target_velocities
+                del loss, onset_loss, offset_loss, velocity_loss
+                
+            # Clean up CUDA memory after validation
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         
         val_loss = np.mean(val_losses)
         val_onset_loss = np.mean(val_onset_losses)
         val_offset_loss = np.mean(val_offset_losses)
         val_velocity_loss = np.mean(val_velocity_losses)
+        val_activation_loss = np.mean(val_activation_losses)
+        
+        # Monitor prediction statistics on last validation batch
+        val_onset_stats = calculate_prediction_stats(pred_onsets, threshold=0.5)
+        val_offset_stats = calculate_prediction_stats(pred_offsets, threshold=0.5)
+        print(f"Validation Onset Stats: min={val_onset_stats['min']:.4f}, max={val_onset_stats['max']:.4f}, mean={val_onset_stats['mean']:.4f}, % positive={val_onset_stats['percent_positive']:.2f}%")
+        print(f"Validation Offset Stats: min={val_offset_stats['min']:.4f}, max={val_offset_stats['max']:.4f}, mean={val_offset_stats['mean']:.4f}, % positive={val_offset_stats['percent_positive']:.2f}%")
         
         # Update learning rate scheduler
         scheduler.step(val_loss)
@@ -342,8 +439,8 @@ def train_model(args):
         history['lr'].append(current_lr)
         
         # Print progress
-        print(f"Train Loss: {train_loss:.4f} (Onset: {train_onset_loss:.4f}, Offset: {train_offset_loss:.4f}, Velocity: {train_velocity_loss:.4f})")
-        print(f"Val Loss: {val_loss:.4f} (Onset: {val_onset_loss:.4f}, Offset: {val_offset_loss:.4f}, Velocity: {val_velocity_loss:.4f})")
+        print(f"Train Loss: {train_loss:.4f} (Onset: {train_onset_loss:.4f}, Offset: {train_offset_loss:.4f}, Velocity: {train_velocity_loss:.4f}, Activation: {train_activation_loss:.4f})")
+        print(f"Val Loss: {val_loss:.4f} (Onset: {val_onset_loss:.4f}, Offset: {val_offset_loss:.4f}, Velocity: {val_velocity_loss:.4f}, Activation: {val_activation_loss:.4f})")
         print(f"Learning Rate: {current_lr}")
         
         # Save checkpoint if validation loss improved
@@ -441,8 +538,8 @@ def main():
     
     # Training parameters
     parser.add_argument('--batch-size', type=int, default=16,
-                        help='Batch size')
-    parser.add_argument('--epochs', type=int, default=50,
+                        help='Batch size (reduce to 4-8 if GPU memory is limited)')
+    parser.add_argument('--epochs', type=int, default=30,
                         help='Number of epochs')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='Learning rate')
@@ -455,7 +552,7 @@ def main():
     parser.add_argument('--hop-length', type=int, default=512,
                         help='Hop length for feature extraction')
     parser.add_argument('--num-workers', type=int, default=4,
-                        help='Number of worker processes for data loading')
+                        help='Number of worker processes for data loading (0 for debugging)')
     parser.add_argument('--cpu', action='store_true',
                         help='Force CPU training even if CUDA is available')
     
@@ -467,7 +564,29 @@ def main():
     parser.add_argument('--velocity-weight', type=float, default=0.3,
                         help='Weight for velocity loss')
     
+    # Class imbalance handling
+    parser.add_argument('--onset-pos-weight', type=float, default=10.0,
+                        help='Positive class weight for onset detection (higher values emphasize note detection)')
+    parser.add_argument('--offset-pos-weight', type=float, default=10.0,
+                        help='Positive class weight for offset detection (higher values emphasize note endings)')
+    
+    # GPU optimization
+    parser.add_argument('--cudnn-benchmark', action='store_true',
+                        help='Enable cuDNN benchmark for better GPU performance')
+    
+    # New loss term parameters
+    parser.add_argument('--min-activation-target', type=float, default=0.1,
+                        help='Target for minimum activation loss')
+    parser.add_argument('--activation-loss-weight', type=float, default=0.1,
+                        help='Weight for activation loss')
+    
     args = parser.parse_args()
+    
+    # Set cuDNN benchmark if requested (can improve performance with fixed input sizes)
+    if args.cudnn_benchmark and torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+        print("cuDNN benchmark enabled")
+    
     train_model(args)
 
 if __name__ == "__main__":

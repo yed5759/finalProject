@@ -1,6 +1,9 @@
 # Large data files
 dataset
 data
+models
 
-# Virtual environment
+# Miscellanious
 venv
+__pycache__
+output
