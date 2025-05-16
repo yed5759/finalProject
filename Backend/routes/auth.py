@@ -1,8 +1,10 @@
 # routes/auth.py
 
 from flask import Blueprint, request, jsonify
-from utils.auth import exchange_code_for_tokens
-from utils.user import ensure_user_exists
+from utils.auth import (
+    exchange_code_for_tokens,
+    ensure_user_exists
+)
     
 auth_routes = Blueprint("auth", __name__)
 
@@ -21,7 +23,11 @@ def auth_callback():
         id_token = tokens.get("id_token")
 
         # Ensure the user exists in the DB, but don't return user data
-        ensure_user_exists(id_token)
+        user = ensure_user_exists(id_token)
+
+        if not user:
+            return jsonify({"error": "User creation failed"}), 500 
+
 
         return jsonify({
             "id_token": tokens["id_token"],
@@ -30,3 +36,6 @@ def auth_callback():
 
     except Exception as e:
         return jsonify({"error": "Failed to process user", "details": str(e)}), 400
+
+
+# todo maybe add /auth/logout route
