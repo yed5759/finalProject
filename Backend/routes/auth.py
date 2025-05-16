@@ -36,6 +36,3 @@ def auth_callback():
 
     except Exception as e:
         return jsonify({"error": "Failed to process user", "details": str(e)}), 400
-
-
-# todo maybe add /auth/logout route
