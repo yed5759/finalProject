@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordBearer
-from utils.auth import get_user_by_token
+from utils.user import get_user_by_token
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

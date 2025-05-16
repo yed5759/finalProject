@@ -1,6 +1,6 @@
 # routes/songs.py
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from utils.user import get_user_by_token
 from utils.songs import (
     get_songs_for_user, add_song_to_user,
