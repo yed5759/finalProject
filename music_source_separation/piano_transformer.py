@@ -266,9 +266,34 @@ def process_audio_file(file_path, sample_rate=16000, hop_length=512, n_cqt_bins=
     Returns:
         features: Audio features (CQT, onset, offset, velocity)
     """
-    audio, sr = librosa.load(file_path, sr=sample_rate, mono=True)
+    audio, sr = load_audio(file_path, sample_rate)
     
     # Extract CQT features
+    cqt = extract_cqt(audio, sr, hop_length, n_cqt_bins)
+    
+    # Extract onset features
+    onset_env = extract_onset(audio, sr, n_fft, hop_length)
+    
+    # Compute offset features
+    offset_env = extract_offset(onset_env)
+    
+    # Compute velocity features
+    velocity = extract_velocity(audio, n_fft, hop_length)
+    
+    # Stack features
+    features = stack_features(cqt, onset_env, offset_env, velocity)
+    
+    # Normalize features
+    features = normalize_features(features)
+    
+    # Transpose to (time, features)
+    return features.T
+
+def load_audio(file_path, sample_rate):
+    audio, sr = librosa.load(file_path, sr=sample_rate, mono=True)
+    return audio, sr
+
+def extract_cqt(audio, sr, hop_length, n_cqt_bins):
     cqt = librosa.cqt(
         y=audio,
         sr=sr,
@@ -277,41 +302,38 @@ def process_audio_file(file_path, sample_rate=16000, hop_length=512, n_cqt_bins=
         bins_per_octave=12,
         fmin=librosa.note_to_hz('A0')
     )
-    cqt_spectrogram = librosa.amplitude_to_db(np.abs(cqt), ref=np.max)
-    
-    # Extract onset features
-    onset_env = librosa.onset.onset_strength(
+    return librosa.amplitude_to_db(np.abs(cqt), ref=np.max)
+
+def extract_onset(audio, sr, n_fft, hop_length):
+    return librosa.onset.onset_strength(
         y=audio, 
         sr=sr,
         n_fft=n_fft,
         hop_length=hop_length
     )
-    
-    # Compute offset features
+
+def extract_offset(onset_env):
     offset_env = -np.diff(onset_env, append=0)
-    offset_env = np.maximum(0, offset_env)
-    
-    # Compute velocity features
+    return np.maximum(0, offset_env)
+
+def extract_velocity(audio, n_fft, hop_length):
     rms = librosa.feature.rms(y=audio, frame_length=n_fft, hop_length=hop_length)[0]
-    velocity = librosa.util.normalize(rms) 
-    
-    # Stack features
-    features = np.vstack([
-        cqt_spectrogram,          # CQT bins
+    return librosa.util.normalize(rms)
+
+def stack_features(cqt, onset_env, offset_env, velocity):
+    return np.vstack([
+        cqt,                     # CQT bins
         onset_env.reshape(1, -1), # Onset detection
         offset_env.reshape(1, -1), # Offset detection
         velocity.reshape(1, -1)   # Velocity information
     ])
-    
-    # Normalize features
+
+def normalize_features(features):
     min_val = np.min(features)
     max_val = np.max(features)
-    features = (features - min_val) / (max_val - min_val + 1e-8)
-    
-    # Transpose to (time, features)
-    features = features.T
-    
-    return features
+    return (features - min_val) / (max_val - min_val + 1e-8)
+
+# ========== MIDI to Piano Roll ==========
 
 # Function to convert MIDI to piano roll (onset, offset, velocity)
 def midi_to_piano_roll(midi_data, hop_length=512, sample_rate=16000, roll_length=None):
@@ -330,52 +352,76 @@ def midi_to_piano_roll(midi_data, hop_length=512, sample_rate=16000, roll_length
         velocities: Normalized velocity matrix (frames x 88 keys)
     """
     # Get max time
-    if roll_length is None:
-        max_time = midi_data.get_end_time()
-        roll_length = int(max_time * sample_rate / hop_length) + 1
-    
-    # Create empty matrices
-    onsets = np.zeros((roll_length, 88))
-    offsets = np.zeros((roll_length, 88))
-    velocities = np.zeros((roll_length, 88))
+    roll_length = get_roll_length(midi_data, hop_length, sample_rate, roll_length)
     
     # Frame timing (seconds per frame)
     frame_time = hop_length / sample_rate
     
     # Process each note
+    return fill_piano_rolls_from_midi(midi_data, frame_time, roll_length)    
+
+def get_roll_length(midi_data, hop_length, sample_rate, roll_length=None):
+    if roll_length is not None:
+        return roll_length
+    max_time = midi_data.get_end_time()
+    return int(max_time * sample_rate / hop_length) + 1
+
+def initialize_piano_rolls(roll_length):
+    return (
+        np.zeros((roll_length, 88)),  # onsets
+        np.zeros((roll_length, 88)),  # offsets
+        np.zeros((roll_length, 88))   # velocities
+    )
+
+def fill_piano_rolls_from_midi(midi_data, frame_time, roll_length):
+    # Create empty matrices
+    onsets, offsets, velocities = initialize_piano_rolls(roll_length)
+    
     for instrument in midi_data.instruments:
         if instrument.is_drum:
             continue
-            
         for note in instrument.notes:
+           
             # Skip notes outside piano range
-            if note.pitch < 21 or note.pitch > 108:
+            result = process_midi_note(note, frame_time, roll_length)
+            if result is None:
                 continue
-                
-            # Convert pitch to piano key (0-87)
-            key = note.pitch - 21
             
-            # Convert time to frame
-            start_frame = int(note.start / frame_time)
-            end_frame = int(note.end / frame_time)
-            
-            if start_frame >= roll_length or end_frame < 0:
-                continue
-                
-            # Ensure valid indices
-            start_frame = max(0, start_frame)
-            end_frame = min(roll_length - 1, end_frame)
-            
+            key, start_frame, end_frame, vel = result
+           
             # Mark onset and offset
             onsets[start_frame, key] = 1.0
             if end_frame < roll_length:
                 offsets[end_frame, key] = 1.0
-                
-            # Set velocity
-            normalized_velocity = note.velocity / 127.0
-            velocities[start_frame:end_frame+1, key] = normalized_velocity
-    
+
+            # Set velocity    
+            velocities[start_frame:end_frame+1, key] = vel
+            
     return onsets, offsets, velocities
+
+def process_midi_note(note, frame_time, roll_length):
+    if note.pitch < 21 or note.pitch > 108:
+        return None
+    
+    # Convert pitch to piano key (0-87)
+    key = note.pitch - 21
+    
+    # Convert time to frame
+    start_frame = int(note.start / frame_time)
+    end_frame = int(note.end / frame_time)
+    if start_frame >= roll_length or end_frame < 0:
+        return None
+    
+    # Ensure valid indices
+    start_frame = max(0, start_frame)
+    end_frame = min(roll_length - 1, end_frame)
+    
+    # Set velocity
+    normalized_velocity = note.velocity / 127.0
+    
+    return key, start_frame, end_frame, normalized_velocity
+
+# ========== Piano Roll to MIDI ==========
 
 # Function to convert piano roll to MIDI file
 def notes_to_midi(onsets, offsets, velocities, hop_length=512, sample_rate=16000):
@@ -396,52 +442,58 @@ def notes_to_midi(onsets, offsets, velocities, hop_length=512, sample_rate=16000
     midi = pretty_midi.PrettyMIDI()
     piano = pretty_midi.Instrument(program=0)  # Piano
     
-    # Frame timing
-    frame_time = hop_length / sample_rate
-    
     # Process each piano key
     for key in range(88):
-        midi_pitch = key + 21  # Convert to MIDI pitch (A0 = 21)
-        
         # Find onset frames
         onset_frames = np.where(onsets[:, key] > 0.5)[0]
-        
+
         for onset_frame in onset_frames:
             # Find the next offset
-            offset_frames = np.where(offsets[onset_frame:, key] > 0.5)[0]
-            
-            if len(offset_frames) > 0:
-                # Offset is relative to onset_frame, so add it back
-                offset_frame = offset_frames[0] + onset_frame
-            else:
-                # If no offset found, set to end of track
-                offset_frame = len(onsets) - 1
-            
-            # Get start and end times in seconds
-            start_time = onset_frame * frame_time
-            end_time = offset_frame * frame_time
-            
-            # Ensure note has minimum duration
-            if end_time <= start_time:
-                end_time = start_time + 0.1  # 100ms minimum
-            
-            # Get velocity (use onset frame's velocity)
-            velocity = int(min(max(velocities[onset_frame, key] * 127, 1), 127))
+            offset_frame = get_offset_frame(onsets, offsets, key, onset_frame)
             
             # Create note
-            note = pretty_midi.Note(
-                velocity=velocity,
-                pitch=midi_pitch,
-                start=start_time,
-                end=end_time
-            )
+            note = create_midi_note(key, onset_frame, offset_frame, velocities, hop_length, sample_rate)
             
             # Add to instrument
             piano.notes.append(note)
-    
     # Add piano to MIDI object
     midi.instruments.append(piano)
     return midi
+
+def frame_to_time(frame, frame_time):
+    return frame * frame_time
+
+def get_offset_frame(onsets, offsets, key, onset_frame):
+    offset_frames = np.where(offsets[onset_frame:, key] > 0.5)[0]
+    
+    if len(offset_frames) > 0:
+        # Offset is relative to onset_frame, so add it back
+        return offset_frames[0] + onset_frame
+    # If no offset found, set to end of track
+    return len(onsets) - 1  # fallback
+
+def create_midi_note(key, onset_frame, offset_frame, velocities, hop_length, sample_rate):
+    # Frame timing
+    frame_time = hop_length / sample_rate
+
+    # Get start and end times in seconds
+    start_time = frame_to_time(onset_frame, frame_time)
+    end_time = frame_to_time(offset_frame, frame_time)
+    
+    # Ensure note has minimum duration
+    if end_time <= start_time:
+        end_time = start_time + 0.1  # min duration
+    
+    # Get velocity (use onset frame's velocity)
+    velocity = int(min(max(velocities[onset_frame, key] * 127, 1), 127))
+    
+    # Create note
+    return pretty_midi.Note(
+        velocity=velocity,
+        pitch=key + 21, # Convert to MIDI pitch (A0 = 21)
+        start=start_time,
+        end=end_time
+    )
 
 # ===== Dataset for Training =====
 
