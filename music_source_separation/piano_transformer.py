@@ -845,31 +845,58 @@ class PianoTranscriptionSystem:
             midi_data: PrettyMIDI object
         """
         # Preprocess audio
-        features, audio_length = preprocess_audio(
-            audio_file, 
+        features = self.load_and_preprocess_audio(audio_file, sample_rate, n_fft, hop_length, n_cqt_bins)
+        onset_probs, offset_probs, velocity_preds = self.run_model_forward(features)
+        midi_data = self.convert_predictions_to_midi(
+            onset_probs, offset_probs, velocity_preds, output_midi_file, hop_length, sample_rate
+        )
+        return midi_data 
+    
+    def load_and_preprocess_audio(self, audio_file, sample_rate, n_fft, hop_length, n_cqt_bins):
+        """
+        Load and preprocess audio file into CQT features tensor
+        """
+        features, _ = preprocess_audio(
+            audio_file,
             sample_rate=sample_rate,
             n_fft=n_fft,
             hop_length=hop_length,
             n_cqt_bins=n_cqt_bins
         )
-        
         # Convert to tensor
-        features = torch.tensor(features, dtype=torch.float32).T.unsqueeze(0).to(self.device)
-        
+        features_tensor = torch.tensor(features, dtype=torch.float32).T.unsqueeze(0).to(self.device)
+        return features_tensor
+
+    def run_model_forward(self, features_tensor):
+        """
+        Run the model on input features and return raw predictions
+        """
+
         # Forward pass
         with torch.no_grad():
-            onset_probs, offset_probs, velocity_preds = self.model(features)
+            onset_probs, offset_probs, velocity_preds = self.model(features_tensor)
         
         # Convert predictions to numpy
         onset_probs = onset_probs.squeeze(0).cpu().numpy()
         offset_probs = offset_probs.squeeze(0).cpu().numpy()
         velocity_preds = velocity_preds.squeeze(0).cpu().numpy()
-        
+
+        return onset_probs, offset_probs, velocity_preds
+
+
+    def convert_predictions_to_midi(self, onset_probs, offset_probs, velocity_preds, output_file, hop_length, sample_rate):
+        """
+        Convert predictions to PrettyMIDI object and save as MIDI file
+        """
+
+        # Convert hop length to time
+        hop_time = hop_length / sample_rate
+
         # Create MIDI file
         midi_data = create_midi_from_predictions(
             (onset_probs, offset_probs, velocity_preds),
-            output_file=output_midi_file,
-            hop_time=hop_length / sample_rate  # Convert hop length to time
+            output_file=output_file,
+            hop_time=hop_time 
         )
-        
-        return midi_data 
+    
+        return midi_data
