@@ -14,16 +14,20 @@ import gc
 
 from piano_transformer import PianoTransformer, process_audio_file, midi_to_piano_roll
 
-def evaluate_model(args):
-    device = torch.device('cuda' if torch.cuda.is_available() and not args.cpu else 'cpu')
-    print(f"Using device: {device}")
-    
-    # Load model
+def load_model(args, device):
     model_path = Path(args.model_path)
     if not model_path.exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
     
+    # Load checkpoint args or fallback to user args
+    n_cqt_bins = args.n_cqt_bins
+    hidden_dim = args.hidden_dim
+    num_layers = args.num_layers
+    num_heads = args.num_heads
+    dropout = args.dropout
+    
     # Determine model parameters (either from checkpoint or user arguments)
+    checkpoint = None
     if model_path.suffix == '.pt':
         try:
             checkpoint = torch.load(model_path, map_location=device)
@@ -35,27 +39,8 @@ def evaluate_model(args):
                 num_layers = model_args.num_layers
                 num_heads = model_args.num_heads
                 dropout = model_args.dropout
-            else:
-                # Just a state dict, use command line args
-                n_cqt_bins = args.n_cqt_bins
-                hidden_dim = args.hidden_dim
-                num_layers = args.num_layers
-                num_heads = args.num_heads
-                dropout = args.dropout
         except Exception as e:
             print(f"Error loading checkpoint arguments: {e}")
-            n_cqt_bins = args.n_cqt_bins
-            hidden_dim = args.hidden_dim
-            num_layers = args.num_layers
-            num_heads = args.num_heads
-            dropout = args.dropout
-    else:
-        # Use command line arguments
-        n_cqt_bins = args.n_cqt_bins
-        hidden_dim = args.hidden_dim
-        num_layers = args.num_layers
-        num_heads = args.num_heads
-        dropout = args.dropout
     
     # Create model
     model = PianoTransformer(
@@ -67,43 +52,35 @@ def evaluate_model(args):
     ).to(device)
     
     # Load model weights
-    if model_path.suffix == '.pt':
-        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'])
-        else:
-            model.load_state_dict(torch.load(model_path, map_location=device))
+    if checkpoint and isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
     else:
         model.load_state_dict(torch.load(model_path, map_location=device))
     
     model.eval()
     print("Model loaded successfully")
-    
-    # Create output directory
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Get test files
-    test_audio_dir = Path(args.data_dir) / 'test' / 'audio'
-    test_midi_dir = Path(args.data_dir) / 'test' / 'midi'
-    
+    return model, n_cqt_bins
+
+def load_test_files(data_dir):
+    test_audio_dir = Path(data_dir) / 'test' / 'audio'
+    test_midi_dir = Path(data_dir) / 'test' / 'midi'
     if not test_audio_dir.exists() or not test_midi_dir.exists():
-        raise FileNotFoundError(f"Test data not found in {args.data_dir}/test")
+        raise FileNotFoundError(f"Test data not found in {data_dir}/test")
     
     audio_files = sorted(list(test_audio_dir.glob('*.wav')))
     midi_files = []
-    
-    for audio_file in audio_files:
+    for audio_file in audio_files[:]:
         midi_file = test_midi_dir / f"{audio_file.stem}.mid"
         if midi_file.exists():
             midi_files.append(midi_file)
         else:
             print(f"Warning: No matching MIDI file for {audio_file}")
             audio_files.remove(audio_file)
-    
     print(f"Found {len(audio_files)} test files with matching MIDI")
-    
-    # Evaluation metrics
-    metrics = {
+    return audio_files, midi_files
+
+def initialize_metrics():
+    return {
         'onset_precision': [],
         'onset_recall': [],
         'onset_f1': [],
@@ -112,6 +89,155 @@ def evaluate_model(args):
         'offset_f1': [],
         'velocity_rmse': []
     }
+
+def predict_chunks(model, features, device, max_seq_len):
+    # Initialize prediction arrays
+    pred_onsets = np.zeros((len(features), 88))
+    pred_offsets = np.zeros((len(features), 88))
+    pred_velocities = np.zeros((len(features), 88))
+
+    # Process in chunks with overlap
+    chunk_size = max_seq_len
+    overlap = min(chunk_size // 4, 1000) # 25% overlap, max 1000 frames
+
+
+    for start_idx in range(0, len(features), chunk_size - overlap):
+        end_idx = min(start_idx + chunk_size, len(features))
+        chunk_features = features[start_idx:end_idx]
+        chunk_length = len(chunk_features)
+
+        # Convert to tensor and add batch dimension
+        chunk_tensor = torch.FloatTensor(chunk_features).unsqueeze(0).to(device)
+
+        # Make predictions
+        with torch.no_grad():
+            chunk_onsets, chunk_offsets, chunk_velocities = model(chunk_tensor)
+
+        # Convert to numpy - no need for sigmoid as it's already applied in the model
+        chunk_onsets = chunk_onsets[0].cpu().numpy()
+        chunk_offsets = chunk_offsets[0].cpu().numpy()
+        chunk_velocities = chunk_velocities[0].cpu().numpy()
+
+        if start_idx == 0:
+            # First chunk
+            pred_onsets[:end_idx] = chunk_onsets
+            pred_offsets[:end_idx] = chunk_offsets
+            pred_velocities[:end_idx] = chunk_velocities
+        else:
+            # Handle overlap with linear blending
+            blend_start = start_idx
+            blend_end = min(start_idx + overlap, len(features))
+            blend_length = blend_end - blend_start
+
+            # Create linear weights for blending
+            old_weight = np.linspace(1, 0, blend_length).reshape(-1, 1)
+            new_weight = np.linspace(0, 1, blend_length).reshape(-1, 1)
+            
+            # Blend overlap region
+            pred_onsets[blend_start:blend_end] = old_weight * pred_onsets[blend_start:blend_end] + new_weight * chunk_onsets[:blend_length]
+            pred_offsets[blend_start:blend_end] = old_weight * pred_offsets[blend_start:blend_end] + new_weight * chunk_offsets[:blend_length]
+            pred_velocities[blend_start:blend_end] = old_weight * pred_velocities[blend_start:blend_end] + new_weight * chunk_velocities[:blend_length]
+
+            if end_idx > blend_end:
+                # Copy non-overlap region
+                pred_onsets[blend_end:end_idx] = chunk_onsets[blend_length:chunk_length]
+                pred_offsets[blend_end:end_idx] = chunk_offsets[blend_length:chunk_length]
+                pred_velocities[blend_end:end_idx] = chunk_velocities[blend_length:chunk_length]
+
+        # Free up GPU memory
+        del chunk_tensor, chunk_onsets, chunk_offsets, chunk_velocities
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # Report progress
+        progress = (end_idx / len(features)) * 100
+        print(f"  Processed {end_idx}/{len(features)} frames ({progress:.1f}%)")
+
+        # Check if we've reached the end
+        if end_idx == len(features):
+            break
+
+    return pred_onsets, pred_offsets, pred_velocities
+
+def predict_full(model, features, device):
+    # Convert to tensor and add batch dimension
+    audio_tensor = torch.FloatTensor(features).unsqueeze(0).to(device)
+    
+    # Make predictions
+    with torch.no_grad():
+        pred_onsets, pred_offsets, pred_velocities = model(audio_tensor)
+    
+    # Convert to numpy - no need for sigmoid as it's already applied in the model
+    pred_onsets = pred_onsets[0].cpu().numpy()
+    pred_offsets = pred_offsets[0].cpu().numpy()
+    pred_velocities = pred_velocities[0].cpu().numpy()
+    
+    # Free up GPU memory
+    del audio_tensor
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
+    return pred_onsets, pred_offsets, pred_velocities
+
+def calculate_metrics(ground_truth_onsets, ground_truth_offsets, ground_truth_velocities,
+                      pred_onsets, pred_offsets, pred_velocities, args):
+    # Apply threshold to onsets/offsets
+    pred_onsets_binary = pred_onsets > args.onset_threshold
+    pred_offsets_binary = pred_offsets > args.offset_threshold
+
+    # Calculate metrics
+    # Flatten for sklearn metrics
+    gt_onsets_flat = ground_truth_onsets.flatten()
+    pred_onsets_flat = pred_onsets_binary.flatten()
+
+    gt_offsets_flat = ground_truth_offsets.flatten()
+    pred_offsets_flat = pred_offsets_binary.flatten()
+
+    # Only evaluate velocity on notes that exist (where onset=1)
+    mask = gt_onsets_flat > 0
+    gt_velocities_masked = ground_truth_velocities.flatten()[mask]
+    pred_velocities_masked = pred_velocities.flatten()[mask]
+
+    # Calculate precision, recall, F1
+    onset_precision, onset_recall, onset_f1, _ = precision_recall_fscore_support(
+        gt_onsets_flat, pred_onsets_flat, average='binary', zero_division=0
+    )
+    offset_precision, offset_recall, offset_f1, _ = precision_recall_fscore_support(
+        gt_offsets_flat, pred_offsets_flat, average='binary', zero_division=0
+    )
+
+    # Calculate velocity RMSE
+    if len(gt_velocities_masked) > 0:
+        velocity_rmse = np.sqrt(mean_squared_error(gt_velocities_masked, pred_velocities_masked))
+    else:
+        velocity_rmse = float('nan')
+
+    return {
+        'onset_precision': onset_precision,
+        'onset_recall': onset_recall,
+        'onset_f1': onset_f1,
+        'offset_precision': offset_precision,
+        'offset_recall': offset_recall,
+        'offset_f1': offset_f1,
+        'velocity_rmse': velocity_rmse
+    }
+
+def evaluate_model(args):
+    device = torch.device('cuda' if torch.cuda.is_available() and not args.cpu else 'cpu')
+    print(f"Using device: {device}")
+    
+    # Load model
+    model, n_cqt_bins = load_model(args, device)
+    
+    # Create output directory
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Get test files
+    audio_files, midi_files = load_test_files(args.data_dir)
+    
+    # Evaluation metrics
+    metrics = initialize_metrics()
     
     # Process each test file
     for i, (audio_file, midi_file) in enumerate(zip(audio_files, midi_files)):
@@ -138,99 +264,16 @@ def evaluate_model(args):
         if len(audio_features) > args.max_sequence_length:
             print(f"Long sequence detected: {len(audio_features)} frames. Using chunked processing.")
             
-            # Initialize prediction arrays
-            pred_onsets = np.zeros((len(audio_features), 88))
-            pred_offsets = np.zeros((len(audio_features), 88))
-            pred_velocities = np.zeros((len(audio_features), 88))
-            
-            # Process in chunks with overlap
-            chunk_size = args.max_sequence_length
-            overlap = min(chunk_size // 4, 1000)  # 25% overlap, max 1000 frames
-            
-            for start_idx in range(0, len(audio_features), chunk_size - overlap):
-                end_idx = min(start_idx + chunk_size, len(audio_features))
-                chunk_features = audio_features[start_idx:end_idx]
-                
-                # Convert to tensor and add batch dimension
-                chunk_tensor = torch.FloatTensor(chunk_features).unsqueeze(0).to(device)
-                
-                # Make predictions
-                with torch.no_grad():
-                    chunk_onsets, chunk_offsets, chunk_velocities = model(chunk_tensor)
-                
-                # Convert to numpy - no need for sigmoid as it's already applied in the model
-                chunk_onsets = chunk_onsets[0].cpu().numpy()
-                chunk_offsets = chunk_offsets[0].cpu().numpy()
-                chunk_velocities = chunk_velocities[0].cpu().numpy()
-                
-                # Add to full predictions with blending in overlap regions
-                chunk_length = len(chunk_features)
-                if start_idx == 0:
-                    # First chunk
-                    pred_onsets[:end_idx] = chunk_onsets
-                    pred_offsets[:end_idx] = chunk_offsets
-                    pred_velocities[:end_idx] = chunk_velocities
-                else:
-                    # Handle overlap with linear blending
-                    blend_start = start_idx
-                    blend_end = min(start_idx + overlap, len(audio_features))
-                    blend_length = blend_end - blend_start
-                    
-                    # Create linear weights for blending
-                    old_weight = np.linspace(1, 0, blend_length).reshape(-1, 1)
-                    new_weight = np.linspace(0, 1, blend_length).reshape(-1, 1)
-                    
-                    # Blend overlap region
-                    pred_onsets[blend_start:blend_end] = (
-                        old_weight * pred_onsets[blend_start:blend_end] + 
-                        new_weight * chunk_onsets[:blend_length]
-                    )
-                    pred_offsets[blend_start:blend_end] = (
-                        old_weight * pred_offsets[blend_start:blend_end] + 
-                        new_weight * chunk_offsets[:blend_length]
-                    )
-                    pred_velocities[blend_start:blend_end] = (
-                        old_weight * pred_velocities[blend_start:blend_end] + 
-                        new_weight * chunk_velocities[:blend_length]
-                    )
-                    
-                    # Copy non-overlap region
-                    if end_idx > blend_end:
-                        pred_onsets[blend_end:end_idx] = chunk_onsets[blend_length:chunk_length]
-                        pred_offsets[blend_end:end_idx] = chunk_offsets[blend_length:chunk_length]
-                        pred_velocities[blend_end:end_idx] = chunk_velocities[blend_length:chunk_length]
-                
-                # Free up GPU memory
-                del chunk_tensor, chunk_onsets, chunk_offsets, chunk_velocities
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                
-                # Report progress
-                progress = (end_idx / len(audio_features)) * 100
-                print(f"  Processed {end_idx}/{len(audio_features)} frames ({progress:.1f}%)")
-                
-                # Check if we've reached the end
-                if end_idx == len(audio_features):
-                    break
+            pred_onsets, pred_offsets, pred_velocities = predict_chunks(
+                model, audio_features, device, args.max_sequence_length
+            )
+
         else:
             # For shorter sequences, process the entire audio at once
-            # Convert to tensor and add batch dimension
-            audio_features_tensor = torch.FloatTensor(audio_features).unsqueeze(0).to(device)
-            
-            # Make predictions
-            with torch.no_grad():
-                pred_onsets, pred_offsets, pred_velocities = model(audio_features_tensor)
-            
-            # Convert to numpy - no need for sigmoid as it's already applied in the model
-            pred_onsets = pred_onsets[0].cpu().numpy()
-            pred_offsets = pred_offsets[0].cpu().numpy()
-            pred_velocities = pred_velocities[0].cpu().numpy()
-            
-            # Free up GPU memory
-            del audio_features_tensor
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        
+            pred_onsets, pred_offsets, pred_velocities = predict_full(
+                model, audio_features, device
+            )
+
         # Add debug output to see prediction statistics
         print(f"Onset prediction stats - min: {pred_onsets.min():.4f}, max: {pred_onsets.max():.4f}, mean: {pred_onsets.mean():.4f}")
         print(f"Offset prediction stats - min: {pred_offsets.min():.4f}, max: {pred_offsets.max():.4f}, mean: {pred_offsets.mean():.4f}")
@@ -238,52 +281,30 @@ def evaluate_model(args):
         print(f"Offset predictions > threshold: {(pred_offsets > args.offset_threshold).sum()} out of {pred_offsets.size}")
         print(f"Ground truth onset positives: {ground_truth_onsets.sum()} out of {ground_truth_onsets.size}")
         print(f"Ground truth offset positives: {ground_truth_offsets.sum()} out of {ground_truth_offsets.size}")
-        
-        # Apply threshold to onsets/offsets
-        pred_onsets_binary = pred_onsets > args.onset_threshold
-        pred_offsets_binary = pred_offsets > args.offset_threshold
-        
-        # Calculate metrics
-        # Flatten for sklearn metrics
-        gt_onsets_flat = ground_truth_onsets.flatten()
-        pred_onsets_flat = pred_onsets_binary.flatten()
-        
-        gt_offsets_flat = ground_truth_offsets.flatten()
-        pred_offsets_flat = pred_offsets_binary.flatten()
-        
-        # Only evaluate velocity on notes that exist (where onset=1)
-        mask = gt_onsets_flat > 0
-        gt_velocities_masked = ground_truth_velocities.flatten()[mask] 
-        pred_velocities_masked = pred_velocities.flatten()[mask]
-        
-        # Calculate precision, recall, F1
-        onset_precision, onset_recall, onset_f1, _ = precision_recall_fscore_support(
-            gt_onsets_flat, pred_onsets_flat, average='binary', zero_division=0
+
+        # Evaluate performance
+        file_metrics = calculate_metrics(
+            ground_truth_onsets,
+            ground_truth_offsets,
+            ground_truth_velocities,
+            pred_onsets,
+            pred_offsets,
+            pred_velocities
         )
-        
-        offset_precision, offset_recall, offset_f1, _ = precision_recall_fscore_support(
-            gt_offsets_flat, pred_offsets_flat, average='binary', zero_division=0
-        )
-        
-        # Calculate velocity RMSE
-        if len(gt_velocities_masked) > 0:
-            velocity_rmse = np.sqrt(mean_squared_error(gt_velocities_masked, pred_velocities_masked))
-        else:
-            velocity_rmse = float('nan')
-        
+
         # Store metrics
-        metrics['onset_precision'].append(onset_precision)
-        metrics['onset_recall'].append(onset_recall)
-        metrics['onset_f1'].append(onset_f1)
-        metrics['offset_precision'].append(offset_precision)
-        metrics['offset_recall'].append(offset_recall)
-        metrics['offset_f1'].append(offset_f1)
-        metrics['velocity_rmse'].append(velocity_rmse)
-        
+        metrics['onset_precision'].append(file_metrics['onset_precision'])
+        metrics['onset_recall'].append(file_metrics['onset_recall'])
+        metrics['onset_f1'].append(file_metrics['onset_f1'])
+        metrics['offset_precision'].append(file_metrics['offset_precision'])
+        metrics['offset_recall'].append(file_metrics['offset_recall'])
+        metrics['offset_f1'].append(file_metrics['offset_f1'])
+        metrics['velocity_rmse'].append(file_metrics['velocity_rmse'])
+            
         # Print metrics for this file
-        print(f"Onset - Precision: {onset_precision:.4f}, Recall: {onset_recall:.4f}, F1: {onset_f1:.4f}")
-        print(f"Offset - Precision: {offset_precision:.4f}, Recall: {offset_recall:.4f}, F1: {offset_f1:.4f}")
-        print(f"Velocity RMSE: {velocity_rmse:.4f}")
+        print(f"Onset - Precision: {file_metrics['onset_precision']:.4f}, Recall: {file_metrics['onset_recall']:.4f}, F1: {file_metrics['onset_f1']:.4f}")
+        print(f"Offset - Precision: {file_metrics['offset_precision']:.4f}, Recall: {file_metrics['offset_recall']:.4f}, F1: {file_metrics['offset_f1']:.4f}")
+        print(f"Velocity RMSE: {file_metrics['velocity_rmse']:.4f}")
         
         # Generate MIDI from predictions if requested
         if args.generate_midi:
