@@ -16,21 +16,21 @@ from datetime import datetime
 
 from piano_transformer import PianoTransformer, PianoTranscriptionDataset, collate_fn
 
-def train_model(args):
-    """Train the piano transformer model"""
-    # Set device
+def setup_device(args):
     if torch.cuda.is_available() and not args.cpu:
         device = torch.device('cuda')
         print(f"Using GPU: {torch.cuda.get_device_name(0)}")
     else:
         device = torch.device('cpu')
         print("Using CPU")
-    
-    # Create model directory
-    model_dir = Path(args.model_dir)
+    return device
+
+def setup_model_directory(model_dir_path):
+    model_dir = Path(model_dir_path)
     model_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Create model
+    return model_dir
+
+def create_model(args, device):
     model = PianoTransformer(
         n_cqt_bins=args.n_cqt_bins,
         hidden_dim=args.hidden_dim,
@@ -38,10 +38,11 @@ def train_model(args):
         num_heads=args.num_heads,
         dropout=args.dropout
     ).to(device)
-    
     print(model)
     print(f"Total parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
-    
+    return model
+
+def create_datasets_and_loaders(args):
     # Create datasets
     train_dataset = PianoTranscriptionDataset(
         audio_dir=Path(args.data_dir) / 'train' / 'audio',
@@ -51,7 +52,6 @@ def train_model(args):
         sample_rate=args.sample_rate,
         n_cqt_bins=args.n_cqt_bins
     )
-    
     val_dataset = PianoTranscriptionDataset(
         audio_dir=Path(args.data_dir) / 'val' / 'audio',
         midi_dir=Path(args.data_dir) / 'val' / 'midi',
@@ -59,9 +59,8 @@ def train_model(args):
         hop_length=args.hop_length,
         sample_rate=args.sample_rate,
         n_cqt_bins=args.n_cqt_bins,
-        random_offset=False  # No random offsets for validation
+        random_offset=False
     )
-    
     # Create dataloaders
     train_loader = DataLoader(
         train_dataset,
@@ -72,7 +71,6 @@ def train_model(args):
         pin_memory=True,
         drop_last=True
     )
-    
     val_loader = DataLoader(
         val_dataset,
         batch_size=args.batch_size,
@@ -81,22 +79,57 @@ def train_model(args):
         collate_fn=collate_fn,
         pin_memory=True
     )
-    
-    # Define optimizer and learning rate scheduler
+    return train_loader, val_loader
+
+def setup_optimizer_scheduler(model, args):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=5, verbose=True
     )
+    return optimizer, scheduler
+
+def define_loss_functions(args, device):
+    pos_weight_onset = torch.tensor([args.onset_pos_weight] * 88).to(device)
+    pos_weight_offset = torch.tensor([args.offset_pos_weight] * 88).to(device)
+    onset_loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight_onset)
+    offset_loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight_offset)
+    velocity_loss_fn = torch.nn.MSELoss()
+    return onset_loss_fn, offset_loss_fn, velocity_loss_fn
+
+def initialize_history():
+    return {
+        'train_loss': [],
+        'val_loss': [],
+        'train_onset_loss': [],
+        'train_offset_loss': [],
+        'train_velocity_loss': [],
+        'val_onset_loss': [],
+        'val_offset_loss': [],
+        'val_velocity_loss': [],
+        'lr': []
+    }
+
+
+def train_model(args):
+    """Train the piano transformer model"""
+    # Set device
+    device = setup_device(args)
+    
+    # Create model directory
+    model_dir = setup_model_directory(args.model_dir)
+
+    # Create model
+    model = create_model(args, device)
+    
+    train_loader, val_loader = create_datasets_and_loaders(args)
+
+    # Define optimizer and learning rate scheduler
+    optimizer, scheduler = setup_optimizer_scheduler(model, args)
     
     # Define loss function for onset, offset, and velocity
     # Use BCEWithLogitsLoss for binary classification tasks (onset, offset)
     # This combines sigmoid with BCE loss and handles numerical stability
-    pos_weight_onset = torch.tensor([args.onset_pos_weight] * 88).to(device)
-    pos_weight_offset = torch.tensor([args.offset_pos_weight] * 88).to(device)
-    
-    onset_loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight_onset)
-    offset_loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight_offset)
-    velocity_loss_fn = torch.nn.MSELoss()
+    onset_loss_fn, offset_loss_fn, velocity_loss_fn = define_loss_functions(args, device)
     
     # Function to monitor prediction statistics during training
     def calculate_prediction_stats(logits_tensor, threshold=0.5):
@@ -116,18 +149,8 @@ def train_model(args):
         return stats
     
     # Training and validation history
-    history = {
-        'train_loss': [],
-        'val_loss': [],
-        'train_onset_loss': [],
-        'train_offset_loss': [],
-        'train_velocity_loss': [],
-        'val_onset_loss': [],
-        'val_offset_loss': [],
-        'val_velocity_loss': [],
-        'lr': []
-    }
-    
+    history = initialize_history()
+  
     best_val_loss = float('inf')
     
     # Training loop
@@ -330,43 +353,59 @@ def train_model(args):
         torch.save(model.state_dict(), latest_model_path)
         
         # Plot training curves (every 5 epochs)
-        if (epoch + 1) % 5 == 0 or epoch == args.epochs - 1:
-            plt.figure(figsize=(15, 10))
-            
-            # Plot combined loss
-            plt.subplot(2, 2, 1)
-            plt.plot(history['train_loss'], label='Train Loss')
-            plt.plot(history['val_loss'], label='Validation Loss')
-            plt.title('Total Loss')
-            plt.legend()
-            
-            # Plot onset loss
-            plt.subplot(2, 2, 2)
-            plt.plot(history['train_onset_loss'], label='Train Onset Loss')
-            plt.plot(history['val_onset_loss'], label='Validation Onset Loss')
-            plt.title('Onset Loss')
-            plt.legend()
-            
-            # Plot offset loss
-            plt.subplot(2, 2, 3)
-            plt.plot(history['train_offset_loss'], label='Train Offset Loss')
-            plt.plot(history['val_offset_loss'], label='Validation Offset Loss')
-            plt.title('Offset Loss')
-            plt.legend()
-            
-            # Plot velocity loss
-            plt.subplot(2, 2, 4)
-            plt.plot(history['train_velocity_loss'], label='Train Velocity Loss')
-            plt.plot(history['val_velocity_loss'], label='Validation Velocity Loss')
-            plt.title('Velocity Loss')
-            plt.legend()
-            
-            plt.tight_layout()
-            plt.savefig(model_dir / f"training_curves_epoch_{epoch+1}.png")
-            plt.close()
-    
+        plot_training_curves(history, epoch, model_dir, args.epochs)
+ 
     #save history
+    save_training_history(history, model_dir)
+
+    # !! רק מבהיר שאני לא שברתי את זה, לא היה פה שום דבר
+    print(f"\nTraining completed. Final model saved to {latest_model_path}")
+
+
+
+def plot_training_curves(history, epoch, model_dir, total_epochs):
+    """
+    Plots and saves training curves every 5 epochs or on the last epoch.
+    """
+    if (epoch + 1) % 5 == 0 or epoch == total_epochs - 1:
+        plt.figure(figsize=(15, 10))
+        
+        # Total Loss
+        plt.subplot(2, 2, 1)
+        plt.plot(history['train_loss'], label='Train Loss')
+        plt.plot(history['val_loss'], label='Validation Loss')
+        plt.title('Total Loss')
+        plt.legend()
+        
+        # Onset Loss
+        plt.subplot(2, 2, 2)
+        plt.plot(history['train_onset_loss'], label='Train Onset Loss')
+        plt.plot(history['val_onset_loss'], label='Validation Onset Loss')
+        plt.title('Onset Loss')
+        plt.legend()
+        
+        # Offset Loss
+        plt.subplot(2, 2, 3)
+        plt.plot(history['train_offset_loss'], label='Train Offset Loss')
+        plt.plot(history['val_offset_loss'], label='Validation Offset Loss')
+        plt.title('Offset Loss')
+        plt.legend()
+        
+        # Velocity Loss
+        plt.subplot(2, 2, 4)
+        plt.plot(history['train_velocity_loss'], label='Train Velocity Loss')
+        plt.plot(history['val_velocity_loss'], label='Validation Velocity Loss')
+        plt.title('Velocity Loss')
+        plt.legend()
+        
+        plt.tight_layout()
+        plot_path = model_dir / f"training_curves_epoch_{epoch + 1}.png"
+        plt.savefig(plot_path)
+        plt.close()
+
+def save_training_history(history, model_dir):
+    """
+    Saves the training history to a .pt file in the model directory.
+    """
     history_path = model_dir / "training_history.pt"
     torch.save(history, history_path)
-    
-    print(f"\nTraining completed. Final model saved to {final_model_path}")
