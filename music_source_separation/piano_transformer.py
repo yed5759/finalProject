@@ -90,11 +90,18 @@ class PianoTransformer(nn.Module):
     
     def _init_parameters(self):
         """
-        Initialize the parameters of the model
+        Initialize the parameters of the model with bias initialization for output layers
+        to ensure some predictions are active from the start
         """
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
+        
+        # Initialize output layer biases to small positive values
+        # This gives a small positive bias to the logits, which helps with the initial predictions
+        nn.init.constant_(self.onset_layer.bias, 0.1)
+        nn.init.constant_(self.offset_layer.bias, 0.1)
+        nn.init.constant_(self.velocity_layer.bias, 0.1)
     
     def forward(self, src, src_mask=None):
         """
@@ -105,9 +112,9 @@ class PianoTransformer(nn.Module):
             src_mask: Mask for source tensor
             
         Returns:
-            onset_probs: Onset predictions with sigmoid applied [batch_size, seq_len, 88]
-            offset_probs: Offset predictions with sigmoid applied [batch_size, seq_len, 88]
-            velocity_preds: Velocity predictions [batch_size, seq_len, 88]
+            onset_logits: Onset logits [batch_size, seq_len, 88]
+            offset_logits: Offset logits [batch_size, seq_len, 88]
+            velocity_logits: Velocity logits [batch_size, seq_len, 88]
         """
         # With batch_first=True, we don't need to transpose the input
         
@@ -124,18 +131,13 @@ class PianoTransformer(nn.Module):
         # Pass through transformer encoder
         output = self.transformer_encoder(src, src_mask)
         
-        # Apply output layers
+        # Apply output layers to get logits
         onset_logits = self.onset_layer(output)
         offset_logits = self.offset_layer(output)
+        velocity_logits = self.velocity_layer(output)
         
-        # Apply sigmoid activation to onset and offset predictions
-        onset_probs = torch.sigmoid(onset_logits)
-        offset_probs = torch.sigmoid(offset_logits)
-        
-        # Velocity is already in [0,1] with sigmoid
-        velocity_preds = torch.sigmoid(self.velocity_layer(output))
-        
-        return onset_probs, offset_probs, velocity_preds
+        # Return logits (without sigmoid) for loss function
+        return onset_logits, offset_logits, velocity_logits
 
 # ===== Audio Processing =====
 
@@ -607,15 +609,40 @@ def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5,
     if isinstance(predictions, tuple) and len(predictions) == 3:
         # Separate predictions for onset, offset, velocity
         onset_predictions, offset_predictions, velocity_predictions = predictions
+        
+        # Apply sigmoid to convert logits to probabilities if needed
+        if isinstance(onset_predictions, np.ndarray) and np.max(np.abs(onset_predictions)) > 1.0:
+            onset_predictions = 1.0 / (1.0 + np.exp(-onset_predictions))  # Apply sigmoid
+        
+        if isinstance(offset_predictions, np.ndarray) and np.max(np.abs(offset_predictions)) > 1.0:
+            offset_predictions = 1.0 / (1.0 + np.exp(-offset_predictions))  # Apply sigmoid
+            
+        if isinstance(velocity_predictions, np.ndarray) and np.max(np.abs(velocity_predictions)) > 1.0:
+            velocity_predictions = 1.0 / (1.0 + np.exp(-velocity_predictions))  # Apply sigmoid
+    
     elif isinstance(predictions, np.ndarray):
         if predictions.shape[1] == num_pitches * 3:
             # Multi-task output in single array: [onset, offset, velocity] for each pitch
             onset_predictions = predictions[:, :num_pitches]
             offset_predictions = predictions[:, num_pitches:2*num_pitches]
             velocity_predictions = predictions[:, 2*num_pitches:3*num_pitches]
+            
+            # Apply sigmoid to convert logits to probabilities if needed
+            if np.max(np.abs(onset_predictions)) > 1.0:
+                onset_predictions = 1.0 / (1.0 + np.exp(-onset_predictions))
+            
+            if np.max(np.abs(offset_predictions)) > 1.0:
+                offset_predictions = 1.0 / (1.0 + np.exp(-offset_predictions))
+                
+            if np.max(np.abs(velocity_predictions)) > 1.0:
+                velocity_predictions = 1.0 / (1.0 + np.exp(-velocity_predictions))
         else:
             # Single-task output: treat as frame activation and derive onset/offset
             frame_predictions = predictions
+            
+            # Apply sigmoid if needed
+            if np.max(np.abs(frame_predictions)) > 1.0:
+                frame_predictions = 1.0 / (1.0 + np.exp(-frame_predictions))
             
             # Derive onset predictions
             onset_predictions = np.zeros_like(frame_predictions)
@@ -629,13 +656,6 @@ def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5,
             velocity_predictions = frame_predictions
     else:
         raise ValueError("Predictions must be a tuple of (onset, offset, velocity) or a single array")
-    
-    # Apply thresholds if onset_predictions contains logits
-    if isinstance(onset_predictions, np.ndarray) and np.max(onset_predictions) > 1.0:
-        onset_predictions = 1.0 / (1.0 + np.exp(-onset_predictions))  # Apply sigmoid
-    
-    if isinstance(offset_predictions, np.ndarray) and np.max(offset_predictions) > 1.0:
-        offset_predictions = 1.0 / (1.0 + np.exp(-offset_predictions))  # Apply sigmoid
     
     # Track active notes for each pitch
     active_notes = {}  # {pitch: (start_time, velocity)}
@@ -713,33 +733,29 @@ def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5,
 
 class PianoTranscriptionSystem:
     """
-    Full piano transcription system
+    Piano transcription system using the trained model
     """
     def __init__(self, model_path=None, device='cuda' if torch.cuda.is_available() else 'cpu'):
         """
-        Initialize the system
+        Initialize the transcription system
         
         Args:
-            model_path: Path to the trained model
-            device: Device to run the model on
+            model_path: Path to the pretrained model (if None, a random model will be created)
+            device: Device to run the model on ('cuda' or 'cpu')
         """
         self.device = device
         
-        # Create model with appropriate output dimensions for onset, offset, and velocity
-        self.model = PianoTransformer(
-            n_cqt_bins=88,
-            hidden_dim=512,
-            num_heads=8,
-            num_layers=6,
-            dropout=0.1,
-            max_len=5000
-        ).to(device)
+        # Create model
+        self.model = PianoTransformer(n_cqt_bins=88).to(device)
         
-        # Load pretrained model if path is provided
-        if model_path and os.path.exists(model_path):
+        # Load pretrained model if provided
+        if model_path:
+            print(f"Loading model from {model_path}")
             self.model.load_state_dict(torch.load(model_path, map_location=device))
-            print(f"Loaded model from {model_path}")
+        else:
+            print("No model provided, using random initialization")
         
+        # Set model to evaluation mode
         self.model.eval()
     
     def transcribe(self, audio_file, output_midi_file, sample_rate=16000, 
@@ -750,40 +766,42 @@ class PianoTranscriptionSystem:
         Args:
             audio_file: Path to audio file
             output_midi_file: Path to output MIDI file
-            sample_rate: Sample rate (16000 or 22050 recommended)
-            n_fft: FFT window size (default: 2048)
-            hop_length: Hop length
+            sample_rate: Audio sample rate
+            n_fft: FFT window size
+            hop_length: Hop length for feature extraction
             n_cqt_bins: Number of CQT bins
             
         Returns:
-            midi_data: PrettyMIDI object
+            Path to output MIDI file
         """
-        # Preprocess audio
-        features, audio_length = preprocess_audio(
-            audio_file, 
+        print(f"Transcribing {audio_file} to {output_midi_file}")
+        
+        # Extract features
+        features = process_audio_file(
+            audio_file,
             sample_rate=sample_rate,
-            n_fft=n_fft,
             hop_length=hop_length,
-            n_cqt_bins=n_cqt_bins
+            n_cqt_bins=n_cqt_bins,
+            n_fft=n_fft
         )
         
         # Convert to tensor
-        features = torch.tensor(features, dtype=torch.float32).T.unsqueeze(0).to(self.device)
+        features = torch.FloatTensor(features).unsqueeze(0).to(self.device)
         
-        # Forward pass
+        # Run model
         with torch.no_grad():
-            onset_probs, offset_probs, velocity_preds = self.model(features)
+            onset_logits, offset_logits, velocity_logits = self.model(features)
         
-        # Convert predictions to numpy
-        onset_probs = onset_probs.squeeze(0).cpu().numpy()
-        offset_probs = offset_probs.squeeze(0).cpu().numpy()
-        velocity_preds = velocity_preds.squeeze(0).cpu().numpy()
+        # Convert logits to numpy arrays
+        onset_logits = onset_logits.squeeze(0).cpu().numpy()
+        offset_logits = offset_logits.squeeze(0).cpu().numpy()
+        velocity_logits = velocity_logits.squeeze(0).cpu().numpy()
         
         # Create MIDI file
         midi_data = create_midi_from_predictions(
-            (onset_probs, offset_probs, velocity_preds),
+            (onset_logits, offset_logits, velocity_logits),
             output_file=output_midi_file,
             hop_time=hop_length / sample_rate  # Convert hop length to time
         )
         
-        return midi_data 
+        return output_midi_file 
