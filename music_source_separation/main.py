@@ -43,10 +43,6 @@ def main():
                         help='Dropout rate')
     
     # Inference parameters
-    parser.add_argument('--onset-threshold', type=float, default=0.5,
-                        help='Threshold for onset detection')
-    parser.add_argument('--offset-threshold', type=float, default=0.5,
-                        help='Threshold for offset detection')
     parser.add_argument('--save-piano-roll', action='store_true',
                         help='Save piano roll visualization')
     parser.add_argument('--cpu', action='store_true',

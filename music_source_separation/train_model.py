@@ -16,160 +16,12 @@ from datetime import datetime
 
 from piano_transformer import PianoTransformer, PianoTranscriptionDataset, collate_fn
 
-class PianoDataset(Dataset):
-    """Dataset for piano transcription"""
-    
-    def __init__(self, data_dir, split='train', 
-                 sample_rate=16000, n_fft=2048, hop_length=512, n_cqt_bins=84,
-                 sequence_length=None, max_files=None):
-        """
-        Initialize dataset
-        
-        Args:
-            data_dir: Path to data directory
-            split: 'train', 'val', or 'test'
-            sample_rate: Sample rate
-            n_fft: FFT window size
-            hop_length: Hop length
-            n_cqt_bins: Number of CQT bins
-            sequence_length: Sequence length (if None, use full sequences)
-            max_files: Maximum number of files to load (for debugging)
-        """
-        self.data_dir = Path(data_dir)
-        self.split = split
-        self.sample_rate = sample_rate
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.n_cqt_bins = n_cqt_bins
-        self.sequence_length = sequence_length
-        
-        # Get audio and MIDI paths
-        audio_dir = self.data_dir / split / 'audio'
-        midi_dir = self.data_dir / split / 'midi'
-        
-        # Find matching audio and MIDI files
-        self.audio_files = sorted(list(audio_dir.glob('*.wav')))
-        midi_files = {f.stem: f for f in midi_dir.glob('*.mid')}
-        
-        # Only keep files that have both audio and MIDI
-        self.pairs = []
-        for audio_file in self.audio_files:
-            if audio_file.stem in midi_files:
-                self.pairs.append({
-                    'audio': audio_file,
-                    'midi': midi_files[audio_file.stem]
-                })
-        
-        # Limit number of files if specified
-        if max_files is not None:
-            self.pairs = self.pairs[:max_files]
-            
-        print(f"Loaded {len(self.pairs)} {split} examples")
-    
-    def __len__(self):
-        return len(self.pairs)
-    
-    def __getitem__(self, idx):
-        pair = self.pairs[idx]
-        
-        # Process audio to extract CQT and onset/offset/velocity features
-        features, _ = preprocess_audio(
-            pair['audio'], 
-            sample_rate=self.sample_rate,
-            n_fft=self.n_fft, 
-            hop_length=self.hop_length,
-            n_cqt_bins=self.n_cqt_bins
-        )
-        features = torch.tensor(features, dtype=torch.float32).T  # (time, features)
-        
-        # Extract piano roll with onset, offset and velocity information
-        midi_data = pretty_midi.PrettyMIDI(str(pair['midi']))
-        piano_roll = self._extract_piano_roll_with_onsets_offsets_velocity(midi_data, features.shape[0])
-        
-        # Apply sequence length if specified
-        if self.sequence_length is not None and features.shape[0] > self.sequence_length:
-            # Randomly select a sequence
-            max_start = features.shape[0] - self.sequence_length
-            start = np.random.randint(0, max_start)
-            end = start + self.sequence_length
-            
-            features = features[start:end]
-            piano_roll = piano_roll[start:end]
-        
-        return features, piano_roll
-    
-    def _extract_piano_roll_with_onsets_offsets_velocity(self, midi_data, length):
-        """
-        Extract piano roll with onset, offset, and velocity information
-        
-        Args:
-            midi_data: PrettyMIDI object
-            length: Desired length of the piano roll
-            
-        Returns:
-            piano_roll: Piano roll with shape (length, 88*3)
-                First 88 columns: Note onsets
-                Next 88 columns: Note offsets
-                Last 88 columns: Note velocities
-        """
-        # Time between frames
-        hop_time = self.hop_length / self.sample_rate
-        
-        # Create empty piano roll with 88*3 columns
-        piano_roll = np.zeros((length, 88 * 3), dtype=np.float32)
-        
-        # Get all piano notes
-        notes = []
-        for instrument in midi_data.instruments:
-            if not instrument.is_drum:  # Skip drum tracks
-                notes.extend(instrument.notes)
-        
-        # Sort notes by start time
-        notes.sort(key=lambda x: x.start)
-        
-        # Fill in onset, offset, and velocity information
-        for note in notes:
-            # Only consider notes in the 88-key piano range (21-108)
-            if not (21 <= note.pitch <= 108):
-                continue
-                
-            # Convert MIDI pitch to piano key index (0-87)
-            piano_key = note.pitch - 21
-            
-            # Convert start and end times to frame indices
-            start_frame = int(note.start / hop_time)
-            end_frame = int(note.end / hop_time)
-            
-            # Ensure frames are within bounds
-            if start_frame >= length or end_frame < 0:
-                continue
-                
-            start_frame = max(0, start_frame)
-            end_frame = min(length - 1, end_frame)
-            
-            # Mark onset frame
-            piano_roll[start_frame, piano_key] = 1.0  # Onset
-            
-            # Mark offset frame
-            if end_frame < length:
-                piano_roll[end_frame, piano_key + 88] = 1.0  # Offset
-            
-            # Fill in velocity for all active frames
-            # Normalize velocity to [0, 1]
-            normalized_velocity = note.velocity / 127.0
-            piano_roll[start_frame:end_frame+1, piano_key + 2*88] = normalized_velocity
-        
-        return torch.tensor(piano_roll, dtype=torch.float32)
-
 def train_model(args):
     """Train the piano transformer model"""
     # Set device
     if torch.cuda.is_available() and not args.cpu:
         device = torch.device('cuda')
         print(f"Using GPU: {torch.cuda.get_device_name(0)}")
-        # Set deterministic behavior for reproducibility, if needed
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
     else:
         device = torch.device('cpu')
         print("Using CPU")
@@ -237,26 +89,27 @@ def train_model(args):
     )
     
     # Define loss function for onset, offset, and velocity
-    # Add class weighting for onset and offset detection to handle class imbalance
-    # Positive examples (actual notes) are much rarer than negative examples
-    # We use a high positive weight to make the model pay more attention to actual notes
-    pos_weight_onset = torch.tensor([args.onset_pos_weight]).to(device)
-    pos_weight_offset = torch.tensor([args.offset_pos_weight]).to(device)
+    # Use BCEWithLogitsLoss for binary classification tasks (onset, offset)
+    # This combines sigmoid with BCE loss and handles numerical stability
+    pos_weight_onset = torch.tensor([args.onset_pos_weight] * 88).to(device)
+    pos_weight_offset = torch.tensor([args.offset_pos_weight] * 88).to(device)
     
-    onset_loss_fn = torch.nn.BCELoss(weight=pos_weight_onset)
-    offset_loss_fn = torch.nn.BCELoss(weight=pos_weight_offset)
+    onset_loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight_onset)
+    offset_loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight_offset)
     velocity_loss_fn = torch.nn.MSELoss()
     
     # Function to monitor prediction statistics during training
-    def calculate_prediction_stats(pred_tensor, threshold=0.5):
+    def calculate_prediction_stats(logits_tensor, threshold=0.5):
         """Calculate statistics about model predictions to monitor training progress"""
         with torch.no_grad():
-            binary_preds = (pred_tensor > threshold).float()
+            # Apply sigmoid to convert logits to probabilities
+            probs_tensor = torch.sigmoid(logits_tensor)
+            binary_preds = (probs_tensor > threshold).float()
             stats = {
-                'min': pred_tensor.min().item(),
-                'max': pred_tensor.max().item(),
-                'mean': pred_tensor.mean().item(),
-                'median': pred_tensor.median().item(),
+                'min': probs_tensor.min().item(),
+                'max': probs_tensor.max().item(),
+                'mean': probs_tensor.mean().item(),
+                'median': probs_tensor.median().item(),
                 'percent_positive': binary_preds.mean().item() * 100,
                 'num_positive': binary_preds.sum().item()
             }
@@ -294,22 +147,25 @@ def train_model(args):
             audio_features, target_onsets, target_offsets, target_velocities = [x.to(device) for x in batch]
             
             # Forward pass
-            pred_onsets, pred_offsets, pred_velocities = model(audio_features)
+            onset_logits, offset_logits, velocity_logits = model(audio_features)
             
             # Calculate losses
-            onset_loss = onset_loss_fn(pred_onsets, target_onsets)
-            offset_loss = offset_loss_fn(pred_offsets, target_offsets)
-            velocity_loss = velocity_loss_fn(pred_velocities * target_onsets, target_velocities * target_onsets)
+            onset_loss = onset_loss_fn(onset_logits, target_onsets)
+            offset_loss = offset_loss_fn(offset_logits, target_offsets)
             
-            # Add activation target loss - encourages predictions to be higher overall
-            # This helps combat the model's tendency to predict all zeros
+            # For velocity, apply sigmoid to get probabilities, then calculate loss only for active notes
+            velocity_probs = torch.sigmoid(velocity_logits)
+            velocity_loss = velocity_loss_fn(velocity_probs * target_onsets, target_velocities * target_onsets)
+            
+            # Add activation target loss - encourages predictions to be more balanced
+            # Use logit space for this calculation
             min_activation_target = args.min_activation_target
             activation_loss_onset = torch.nn.functional.mse_loss(
-                pred_onsets.mean(), 
+                torch.sigmoid(onset_logits).mean(), 
                 torch.tensor(min_activation_target, device=device)
             )
             activation_loss_offset = torch.nn.functional.mse_loss(
-                pred_offsets.mean(), 
+                torch.sigmoid(offset_logits).mean(), 
                 torch.tensor(min_activation_target, device=device)
             )
             activation_loss = activation_loss_onset + activation_loss_offset
@@ -350,8 +206,8 @@ def train_model(args):
         train_activation_loss = np.mean(train_activation_losses)
         
         # Monitor prediction statistics on last training batch
-        onset_stats = calculate_prediction_stats(pred_onsets, threshold=0.5)
-        offset_stats = calculate_prediction_stats(pred_offsets, threshold=0.5)
+        onset_stats = calculate_prediction_stats(onset_logits, threshold=0.5)
+        offset_stats = calculate_prediction_stats(offset_logits, threshold=0.5)
         print(f"Training Onset Stats: min={onset_stats['min']:.4f}, max={onset_stats['max']:.4f}, mean={onset_stats['mean']:.4f}, % positive={onset_stats['percent_positive']:.2f}%")
         print(f"Training Offset Stats: min={offset_stats['min']:.4f}, max={offset_stats['max']:.4f}, mean={offset_stats['mean']:.4f}, % positive={offset_stats['percent_positive']:.2f}%")
         
@@ -369,22 +225,25 @@ def train_model(args):
                 audio_features, target_onsets, target_offsets, target_velocities = [x.to(device) for x in batch]
                 
                 # Forward pass
-                pred_onsets, pred_offsets, pred_velocities = model(audio_features)
+                onset_logits, offset_logits, velocity_logits = model(audio_features)
                 
                 # Calculate losses
-                onset_loss = onset_loss_fn(pred_onsets, target_onsets)
-                offset_loss = offset_loss_fn(pred_offsets, target_offsets)
-                velocity_loss = velocity_loss_fn(pred_velocities * target_onsets, target_velocities * target_onsets)
+                onset_loss = onset_loss_fn(onset_logits, target_onsets)
+                offset_loss = offset_loss_fn(offset_logits, target_offsets)
                 
-                # Add activation target loss - encourages predictions to be higher overall
-                # This helps combat the model's tendency to predict all zeros
+                # For velocity, apply sigmoid to get probabilities, then calculate loss only for active notes
+                velocity_probs = torch.sigmoid(velocity_logits)
+                velocity_loss = velocity_loss_fn(velocity_probs * target_onsets, target_velocities * target_onsets)
+                
+                # Add activation target loss - encourages predictions to be more balanced
+                # Use logit space for this calculation
                 min_activation_target = args.min_activation_target
                 activation_loss_onset = torch.nn.functional.mse_loss(
-                    pred_onsets.mean(), 
+                    torch.sigmoid(onset_logits).mean(), 
                     torch.tensor(min_activation_target, device=device)
                 )
                 activation_loss_offset = torch.nn.functional.mse_loss(
-                    pred_offsets.mean(), 
+                    torch.sigmoid(offset_logits).mean(), 
                     torch.tensor(min_activation_target, device=device)
                 )
                 activation_loss = activation_loss_onset + activation_loss_offset
@@ -418,8 +277,8 @@ def train_model(args):
         val_activation_loss = np.mean(val_activation_losses)
         
         # Monitor prediction statistics on last validation batch
-        val_onset_stats = calculate_prediction_stats(pred_onsets, threshold=0.5)
-        val_offset_stats = calculate_prediction_stats(pred_offsets, threshold=0.5)
+        val_onset_stats = calculate_prediction_stats(onset_logits, threshold=0.5)
+        val_offset_stats = calculate_prediction_stats(offset_logits, threshold=0.5)
         print(f"Validation Onset Stats: min={val_onset_stats['min']:.4f}, max={val_onset_stats['max']:.4f}, mean={val_onset_stats['mean']:.4f}, % positive={val_onset_stats['percent_positive']:.2f}%")
         print(f"Validation Offset Stats: min={val_offset_stats['min']:.4f}, max={val_offset_stats['max']:.4f}, mean={val_offset_stats['mean']:.4f}, % positive={val_offset_stats['percent_positive']:.2f}%")
         
@@ -506,88 +365,8 @@ def train_model(args):
             plt.savefig(model_dir / f"training_curves_epoch_{epoch+1}.png")
             plt.close()
     
-    # Save final model and training history
-    final_model_path = model_dir / "final_model.pt"
-    torch.save(model.state_dict(), final_model_path)
-    
+    #save history
     history_path = model_dir / "training_history.pt"
     torch.save(history, history_path)
     
     print(f"\nTraining completed. Final model saved to {final_model_path}")
-
-def main():
-    parser = argparse.ArgumentParser(description='Train piano transcription model')
-    
-    # Data arguments
-    parser.add_argument('--data-dir', type=str, default='data',
-                        help='Directory containing prepared data')
-    parser.add_argument('--model-dir', type=str, default='models/piano_transformer',
-                        help='Directory to save model checkpoints')
-    
-    # Model parameters
-    parser.add_argument('--n-cqt-bins', type=int, default=88,
-                        help='Number of CQT bins')
-    parser.add_argument('--hidden-dim', type=int, default=256,
-                        help='Hidden dimension of the model')
-    parser.add_argument('--num-layers', type=int, default=6,
-                        help='Number of transformer layers')
-    parser.add_argument('--num-heads', type=int, default=8,
-                        help='Number of attention heads')
-    parser.add_argument('--dropout', type=float, default=0.1,
-                        help='Dropout rate')
-    
-    # Training parameters
-    parser.add_argument('--batch-size', type=int, default=16,
-                        help='Batch size (reduce to 4-8 if GPU memory is limited)')
-    parser.add_argument('--epochs', type=int, default=30,
-                        help='Number of epochs')
-    parser.add_argument('--lr', type=float, default=0.001,
-                        help='Learning rate')
-    parser.add_argument('--grad-clip', type=float, default=1.0,
-                        help='Gradient clipping value')
-    parser.add_argument('--segment-length', type=float, default=10.0,
-                        help='Segment length in seconds for training')
-    parser.add_argument('--sample-rate', type=int, default=16000,
-                        help='Audio sample rate')
-    parser.add_argument('--hop-length', type=int, default=512,
-                        help='Hop length for feature extraction')
-    parser.add_argument('--num-workers', type=int, default=4,
-                        help='Number of worker processes for data loading (0 for debugging)')
-    parser.add_argument('--cpu', action='store_true',
-                        help='Force CPU training even if CUDA is available')
-    
-    # Loss weights
-    parser.add_argument('--onset-weight', type=float, default=1.0,
-                        help='Weight for onset loss')
-    parser.add_argument('--offset-weight', type=float, default=0.5,
-                        help='Weight for offset loss')
-    parser.add_argument('--velocity-weight', type=float, default=0.3,
-                        help='Weight for velocity loss')
-    
-    # Class imbalance handling
-    parser.add_argument('--onset-pos-weight', type=float, default=10.0,
-                        help='Positive class weight for onset detection (higher values emphasize note detection)')
-    parser.add_argument('--offset-pos-weight', type=float, default=10.0,
-                        help='Positive class weight for offset detection (higher values emphasize note endings)')
-    
-    # GPU optimization
-    parser.add_argument('--cudnn-benchmark', action='store_true',
-                        help='Enable cuDNN benchmark for better GPU performance')
-    
-    # New loss term parameters
-    parser.add_argument('--min-activation-target', type=float, default=0.1,
-                        help='Target for minimum activation loss')
-    parser.add_argument('--activation-loss-weight', type=float, default=0.1,
-                        help='Weight for activation loss')
-    
-    args = parser.parse_args()
-    
-    # Set cuDNN benchmark if requested (can improve performance with fixed input sizes)
-    if args.cudnn_benchmark and torch.cuda.is_available():
-        torch.backends.cudnn.benchmark = True
-        print("cuDNN benchmark enabled")
-    
-    train_model(args)
-
-if __name__ == "__main__":
-    main() 
