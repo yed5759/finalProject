@@ -19,7 +19,7 @@ def main():
     # Audio and model arguments
     parser.add_argument('--audio-file', type=str, required=True,
                         help='Path to input audio file (WAV)')
-    parser.add_argument('--model-path', type=str, default='models/piano_transformer/best_model.pt',
+    parser.add_argument('--model-path', type=str, default='None',
                         help='Path to trained model')
     parser.add_argument('--output-dir', type=str, default='output',
                         help='Directory to save output files')
@@ -43,6 +43,7 @@ def main():
                         help='Dropout rate')
     
     # Inference parameters
+    parser.add_argument('--threshold', type=float, default=0.5, help='Threshold for binarizing model output')
     parser.add_argument('--save-piano-roll', action='store_true',
                         help='Save piano roll visualization')
     parser.add_argument('--cpu', action='store_true',
@@ -55,13 +56,10 @@ def main():
 def transcribe_audio(args):
     # Set device
     device = get_device(args.cpu)    
-
     # Load the trained model and extract the CQT bin count
     model, n_cqt_bins = get_model(args, device)
-
     # Create output directory if it doesn't exist
     output_dir = prepare_output_directory(args.output_dir)
-    
     # Load the input audio and extract its features
     audio_path, audio_features = load_and_process_audio(
         args.audio_file,
@@ -93,29 +91,27 @@ def get_device(use_cpu):
 # Load and return model + CQT bin count
 def get_model(args, device):
     # Load model
-    model_path = Path(args.model_path)
-    if not model_path.exists():
-        raise FileNotFoundError(f"Model file not found: {model_path}")
-    
-    # Determine model parameters (from checkpoint or args) and create model
-    checkpoint = load_checkpoint(model_path, device)
-    model, n_cqt_bins = create_model(model_path, checkpoint, device, args)
-    return model, n_cqt_bins
-
-# Load model checkpoint (.pt file)
-def load_checkpoint(model_path, device):
-    if model_path.suffix == '.pt':
-        try:
-            checkpoint = torch.load(model_path, map_location=device)
-            print("Checkpoint loaded")
-            return checkpoint
-        except Exception as e:
-            print(f"Error loading checkpoint: {e}")
-    return None
+    if args.model_path is None:
+        model_dir = Path('models/piano_transformer')
+        # Determine model parameters (from checkpoint or args) and create model
+        checkpoints = sorted(model_dir.glob("checkpoint_epoch_*.pt"), key=lambda x: x.stat().st_mtime, reverse=True)
+        model_path = checkpoints[0] if checkpoints else None
+    else:
+        model_path = Path(args.model_path)
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")        
+    return create_model(model_path, device, args)
 
 # Create model with parameters from checkpoint or CLI arguments
-def create_model(model_path, checkpoint, device, args):
+def create_model(model_path, device, args):
+    checkpoint = None
+    # if there is a checkpoint we use then load it
+    if model_path is not None:
+        checkpoint = torch.load(model_path, map_location=device)
+    
     n_cqt_bins, hidden_dim, num_layers, num_heads, dropout = extract_model_params(checkpoint, args)
+    if checkpoint is None:
+        print("No checkpoint loaded — creating model from CLI args.")
     
     model = PianoTransformer(
         n_cqt_bins=n_cqt_bins,
@@ -126,7 +122,9 @@ def create_model(model_path, checkpoint, device, args):
     ).to(device)
     
     # Load model weights
-    load_model_weights(model, model_path, checkpoint, device)
+    if checkpoint is not None and 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+        print("Loaded model weights from checkpoint.")
     
     model.eval()
     print("Model loaded successfully")
@@ -138,19 +136,9 @@ def extract_model_params(checkpoint, args):
         model_args = argparse.Namespace(**checkpoint['args'])
         print("Loaded model parameters from checkpoint")
         return model_args.n_cqt_bins, model_args.hidden_dim, model_args.num_layers, model_args.num_heads, model_args.dropout
-
+        
+    print("Checkpoint missing model parameters. Falling back to CLI args.")
     return args.n_cqt_bins, args.hidden_dim, args.num_layers, args.num_heads, args.dropout
-
-# Load model weights into initialized model
-def load_model_weights(model, model_path, checkpoint, device):
-    if (
-        model_path.suffix == '.pt' and
-        isinstance(checkpoint, dict) and
-        'model_state_dict' in checkpoint
-    ):
-        model.load_state_dict(checkpoint['model_state_dict'])
-    else:
-        model.load_state_dict(torch.load(model_path, map_location=device))
 
 # Create output directory if not exists
 def prepare_output_directory(output_dir_path):
@@ -162,40 +150,31 @@ def prepare_output_directory(output_dir_path):
 def load_and_process_audio(audio_file_path, sample_rate, hop_length, n_cqt_bins):
     # Process input audio
     audio_path = Path(audio_file_path)
+    
     if not audio_path.exists():
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
     
     # Process audio to extract features
-    audio_features = process_audio(audio_path, sample_rate, hop_length, n_cqt_bins)
-    return audio_path, audio_features
-
-# Extract audio features (e.g., CQT) for model input
-def process_audio(audio_path, sample_rate, hop_length, n_cqt_bins):
-    print(f"Processing audio file: {audio_path}")
     audio_features = process_audio_file(
         audio_path,
         sample_rate=sample_rate,
         hop_length=hop_length,
         n_cqt_bins=n_cqt_bins
     )
-    return audio_features
+    return audio_path, audio_features
 
 # Run full inference pipeline and generate outputs (MIDI, piano roll, stats)
 def generate_output(model, audio_features, device, args, output_dir, audio_path, n_cqt_bins):
-    pred_onsets, pred_offsets, pred_velocities = run_inference(model, audio_features, device)
+    frame_probs = run_inference(model, audio_features, device)
     
-    pred_onsets, pred_offsets, pred_velocities, pred_onsets_binary, pred_offsets_binary = process_predictions(
-        pred_onsets, pred_offsets, pred_velocities, args.onset_threshold, args.offset_threshold
-    )
+    frame_probs, frame_binary = process_predictions(frame_probs, args.threshold)
 
-    piano_roll_path = maybe_save_piano_roll(output_dir, audio_path, pred_onsets, pred_offsets, pred_velocities, args.save_piano_roll)      
+    piano_roll_path = save_piano_roll_figure(output_dir, audio_path, frame_probs, args.save_piano_roll)      
     
     midi_path, notes, duration = save_midi_and_get_stats(
         output_dir,
         audio_path,
-        pred_onsets_binary,
-        pred_offsets_binary,
-        pred_velocities,
+        frame_binary,
         hop_length=args.hop_length,
         sample_rate=args.sample_rate
     )
@@ -213,36 +192,44 @@ def run_inference(model, audio_features, device):
     audio_tensor = torch.FloatTensor(audio_features).unsqueeze(0).to(device)
     # Generate piano transcription
     with torch.no_grad():
-        pred_onsets, pred_offsets, pred_velocities = model(audio_tensor)
-    return pred_onsets[0], pred_offsets[0], pred_velocities[0]
+       frame_probs = model(audio_tensor)
+    return frame_probs[0]
 
 # Process raw model outputs into probabilities and apply thresholds
-def process_predictions(pred_onsets, pred_offsets, pred_velocities, onset_threshold, offset_threshold):
+def process_predictions(frame_probs, threshold):
     # Convert logits to probabilities and numpy arrays
-    pred_onsets = torch.sigmoid(pred_onsets).cpu().numpy()
-    pred_offsets = torch.sigmoid(pred_offsets).cpu().numpy()
-    pred_velocities = pred_velocities.cpu().numpy()
-    
-    # Apply thresholds
-    pred_onsets_binary = pred_onsets > onset_threshold
-    pred_offsets_binary = pred_offsets > offset_threshold
-    
-    return pred_onsets, pred_offsets, pred_velocities, pred_onsets_binary, pred_offsets_binary
+    if isinstance(frame_probs, torch.Tensor):
+        frame_probs = torch.sigmoid(frame_probs).cpu().numpy()
 
-# Conditionally save piano roll visualization
-def maybe_save_piano_roll(output_dir, audio_path, pred_onsets, pred_offsets, pred_velocities, save_flag):
+    frame_binary = frame_probs > threshold
+    return frame_probs, frame_binary
+
+# Visualize piano roll
+def save_piano_roll_figure(output_dir, audio_path, frame_probs, save_flag):
     if not save_flag:
         return None
-    # Save piano roll visualizations
-    return save_piano_roll_figure(output_dir, audio_path, pred_onsets, pred_offsets, pred_velocities)
+
+    plt.figure(figsize=(12, 4))
+    
+    # Plot frame-based piano roll
+    plt.imshow(frame_probs.T, aspect='auto', origin='lower', cmap='Blues')
+    plt.colorbar(label='Note Activation Probability')
+    plt.title("Predicted Frame-Based Piano Roll")
+    plt.ylabel("MIDI Note")
+    plt.xlabel("Time (frames)")
+    
+    plt.tight_layout()
+    piano_roll_path = output_dir / f"{audio_path.stem}_piano_roll.png"
+    plt.savefig(piano_roll_path)
+    plt.close()
+    print(f"Saved piano roll visualization to {piano_roll_path}")
+    return piano_roll_path
 
 # Convert predictions to MIDI, save file, and compute stats
-def save_midi_and_get_stats(output_dir, audio_path, pred_onsets_binary, pred_offsets_binary, pred_velocities, hop_length, sample_rate):
+def save_midi_and_get_stats(output_dir, audio_path, frame_binary, hop_length, sample_rate):
     # Convert predictions to MIDI
     midi_obj = notes_to_midi(
-        pred_onsets_binary,
-        pred_offsets_binary,
-        pred_velocities,
+        frame_binary,
         hop_length=hop_length,
         sample_rate=sample_rate
     )
@@ -257,39 +244,6 @@ def save_midi_and_get_stats(output_dir, audio_path, pred_onsets_binary, pred_off
     print(f"Transcription stats: {notes} notes, {duration:.2f} seconds")
         
     return midi_path, notes, duration
-
-# Visualize onsets, offsets, and velocities as piano roll
-def save_piano_roll_figure(output_dir, audio_path, pred_onsets, pred_offsets, pred_velocities):
-    plt.figure(figsize=(12, 8))
-        
-    # Plot onsets
-    plt.subplot(3, 1, 1)
-    plt.imshow(pred_onsets.T, aspect='auto', origin='lower', cmap='Blues')
-    plt.colorbar(label='Onset Probability')
-    plt.title("Predicted Onsets")
-    plt.ylabel("MIDI Note")
-    
-    # Plot offsets
-    plt.subplot(3, 1, 2)
-    plt.imshow(pred_offsets.T, aspect='auto', origin='lower', cmap='Reds')
-    plt.colorbar(label='Offset Probability')
-    plt.title("Predicted Offsets")
-    plt.ylabel("MIDI Note")
-    
-    # Plot velocities
-    plt.subplot(3, 1, 3)
-    plt.imshow(pred_velocities.T, aspect='auto', origin='lower', cmap='Greens')
-    plt.colorbar(label='Velocity')
-    plt.title("Predicted Velocities")
-    plt.ylabel("MIDI Note")
-    plt.xlabel("Time (frames)")
-    
-    plt.tight_layout()
-    piano_roll_path = output_dir / f"{audio_path.stem}_piano_roll.png"
-    plt.savefig(piano_roll_path)
-    plt.close()
-    print(f"Saved piano roll visualization to {piano_roll_path}")
-    return piano_roll_path
 
 if __name__ == "__main__":
     main() 
