@@ -365,10 +365,7 @@ def train_model(args):
             plt.savefig(model_dir / f"training_curves_epoch_{epoch+1}.png")
             plt.close()
     
-    # Save final model and training history
-    final_model_path = model_dir / "final_model.pt"
-    torch.save(model.state_dict(), final_model_path)
-    
+    #save history
     history_path = model_dir / "training_history.pt"
     torch.save(history, history_path)
     
