@@ -6,6 +6,7 @@ import librosa
 import pretty_midi
 from torch.utils.data import Dataset
 from pathlib import Path
+import pickle
 
 # ===== Model Components =====
 
@@ -57,11 +58,11 @@ class PianoTransformer(nn.Module):
     """
     Transformer model for piano transcription with separate onset, offset, and velocity predictions
     """
-    def __init__(self, n_cqt_bins=88, hidden_dim=512, num_heads=8, num_layers=6, 
-                 dropout=0.1, max_len=5000):
+    def __init__(self, n_cqt_bins=88, hidden_dim=256, num_heads=4, num_layers=3, 
+                 dropout=0.1, max_len=1000):
         super(PianoTransformer, self).__init__()
         
-        input_dim = n_cqt_bins + 3  # CQT bins + onset + offset + velocity features
+        input_dim = n_cqt_bins + 1  # CQT bins + velocity features
         self.hidden_dim = hidden_dim
         
         # Input embedding
@@ -74,16 +75,15 @@ class PianoTransformer(nn.Module):
         encoder_layers = nn.TransformerEncoderLayer(
             d_model=hidden_dim, 
             nhead=num_heads, 
-            dim_feedforward=hidden_dim * 4, 
+            dim_feedforward=hidden_dim * 2, 
             dropout=dropout,
             batch_first=True  # Use batch_first=True for better GPU performance
         )
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers)
         
         # Output layers for onset, offset, and velocity
-        self.onset_layer = nn.Linear(hidden_dim, 88)
-        self.offset_layer = nn.Linear(hidden_dim, 88)
-        self.velocity_layer = nn.Linear(hidden_dim, 88)
+        self.note_layer = nn.Linear(hidden_dim, 88) #For note presence
+        self.velocity_layer = nn.Linear(hidden_dim, 88) #For velocity
         
         # Initialize parameters
         self._init_parameters()
@@ -99,8 +99,7 @@ class PianoTransformer(nn.Module):
         
         # Initialize output layer biases to small positive values
         # This gives a small positive bias to the logits, which helps with the initial predictions
-        nn.init.constant_(self.onset_layer.bias, 0.1)
-        nn.init.constant_(self.offset_layer.bias, 0.1)
+        nn.init.constant_(self.note_layer.bias, 0.1)
         nn.init.constant_(self.velocity_layer.bias, 0.1)
     
     def forward(self, src, src_mask=None):
@@ -132,14 +131,15 @@ class PianoTransformer(nn.Module):
         output = self.transformer_encoder(src, src_mask)
         
         # Apply output layers to get logits
-        onset_logits = self.onset_layer(output)
-        offset_logits = self.offset_layer(output)
-        velocity_logits = self.velocity_layer(output)
+        note_presence = self.note_layer(output)
+        velocity = self.velocity_layer(output)
         
         # Return logits (without sigmoid) for loss function
-        return onset_logits, offset_logits, velocity_logits
+        return note_presence, velocity
 
 # ===== Audio Processing =====
+
+#Move to preprocess
 
 def load_audio(file_path, sample_rate=16000):
     """
@@ -451,280 +451,126 @@ class PianoTranscriptionDataset(Dataset):
     """
     Dataset for piano transcription
     """
-    def __init__(self, audio_dir, midi_dir, segment_length=None, hop_length=512, 
-                 sample_rate=16000, n_cqt_bins=88, random_offset=True):
+    def __init__(self, features_dir, midi_dir, segment_length=None):
         """
         Initialize dataset
         
         Args:
-            audio_dir: Directory containing audio files
+            features_dir: Directory containing preprocessed features
             midi_dir: Directory containing MIDI files
-            segment_length: Segment length in seconds (if None, use full files)
-            hop_length: Hop length for feature extraction
-            sample_rate: Audio sample rate
-            n_cqt_bins: Number of CQT bins
-            random_offset: Whether to use random offset for training
+            segment_length: Segment length in frames (if None, use full files)
         """
-        self.audio_dir = Path(audio_dir)
+        self.features_dir = Path(features_dir)
         self.midi_dir = Path(midi_dir)
         self.segment_length = segment_length
-        self.hop_length = hop_length
-        self.sample_rate = sample_rate
-        self.n_cqt_bins = n_cqt_bins
-        self.random_offset = random_offset
         
-        # Frame length if segment_length is specified
-        self.segment_frames = int(segment_length * sample_rate / hop_length) if segment_length else None
-        
-        # Find all audio files
-        self.audio_files = sorted(list(self.audio_dir.glob('*.wav')))
-        
-        # Check for matching MIDI files
+        # Find all feature and MIDI files
+        self.feature_files = []
         self.midi_files = []
-        valid_audio_files = []
         
-        for audio_file in self.audio_files:
-            midi_file = self.midi_dir / f"{audio_file.stem}.mid"
+        for feature_file in sorted(self.features_dir.glob('*_features.pkl')):
+            midi_file = self.midi_dir / f"{feature_file.stem.replace('_features', '')}.mid"
             if midi_file.exists():
-                valid_audio_files.append(audio_file)
+                self.feature_files.append(feature_file)
                 self.midi_files.append(midi_file)
         
-        self.audio_files = valid_audio_files
-        
-        print(f"Found {len(self.audio_files)} audio files with matching MIDI")
+        print(f"Found {len(self.feature_files)} piano pieces")
     
     def __len__(self):
-        return len(self.audio_files)
+        return len(self.feature_files)
     
     def __getitem__(self, idx):
-        audio_file = self.audio_files[idx]
+        feature_file = self.feature_files[idx]
         midi_file = self.midi_files[idx]
         
-        # Process audio file
         try:
-            # Extract features
-            audio_features = process_audio_file(
-                audio_file,
-                sample_rate=self.sample_rate,
-                hop_length=self.hop_length,
-                n_cqt_bins=self.n_cqt_bins
-            )
+            # Load preprocessed features
+            with open(feature_file, 'rb') as f:
+                features = pickle.load(f)
             
             # Load MIDI file
             midi_data = pretty_midi.PrettyMIDI(str(midi_file))
+            piano_roll = midi_data.get_piano_roll(fs=16000/512)
+            piano_roll = piano_roll[21:109]  # Keep only piano keys
             
-            # Convert to piano roll
-            onsets, offsets, velocities = midi_to_piano_roll(
-                midi_data,
-                hop_length=self.hop_length,
-                sample_rate=self.sample_rate,
-                roll_length=len(audio_features)
-            )
-            
-            # Select segment if needed
-            if self.segment_frames and len(audio_features) > self.segment_frames:
-                if self.random_offset:
-                    # Random offset for training
-                    max_offset = len(audio_features) - self.segment_frames
-                    offset = np.random.randint(0, max_offset)
-                else:
-                    # Use middle segment for validation
-                    offset = (len(audio_features) - self.segment_frames) // 2
-                
-                # Extract segment
-                audio_features = audio_features[offset:offset+self.segment_frames]
-                onsets = onsets[offset:offset+self.segment_frames]
-                offsets = offsets[offset:offset+self.segment_frames]
-                velocities = velocities[offset:offset+self.segment_frames]
+            # Get a random segment if needed
+            if self.segment_length and len(features) > self.segment_length:
+                start = np.random.randint(0, len(features) - self.segment_length)
+                features = features[start:start + self.segment_length]
+                piano_roll = piano_roll[:, start:start + self.segment_length]
             
             # Convert to tensors
-            audio_features = torch.FloatTensor(audio_features)
-            onsets = torch.FloatTensor(onsets)
-            offsets = torch.FloatTensor(offsets)
-            velocities = torch.FloatTensor(velocities)
+            features = torch.FloatTensor(features)
+            piano_roll = torch.FloatTensor(piano_roll.T)
             
-            return audio_features, onsets, offsets, velocities
+            return features, piano_roll
             
         except Exception as e:
-            print(f"Error processing {audio_file}: {e}")
-            # Return a very small dummy sample in case of error
-            dummy_length = 100
-            return (
-                torch.zeros(dummy_length, self.n_cqt_bins + 3),
-                torch.zeros(dummy_length, 88),
-                torch.zeros(dummy_length, 88),
-                torch.zeros(dummy_length, 88)
-            )
+            print(f"Error loading {feature_file}: {e}")
+            # Return dummy data in case of error
+            return torch.zeros(100, 89), torch.zeros(100, 88)
 
 def collate_fn(batch):
     """
-    Collate function for variable length sequences
+    Collate function to make all sequences the same length
     
     Args:
-        batch: List of tuples (audio_features, onsets, offsets, velocities)
+        batch: List of (audio_features, midi_target) pairs
         
     Returns:
-        Padded batch
+        Batch of tensors with same length
     """
-    # Find the shortest sequence in the batch
+    # Find shortest sequence
     min_length = min(x[0].shape[0] for x in batch)
     
-    # Truncate all sequences to the same length
+    # Stack tensors, truncating to shortest length
     audio_features = torch.stack([x[0][:min_length] for x in batch])
-    onsets = torch.stack([x[1][:min_length] for x in batch])
-    offsets = torch.stack([x[2][:min_length] for x in batch])
-    velocities = torch.stack([x[3][:min_length] for x in batch])
+    midi_target = torch.stack([x[1][:min_length] for x in batch])
     
-    return audio_features, onsets, offsets, velocities
+    return audio_features, midi_target
 
 # ===== MIDI Utilities =====
 
-def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5, 
-                                offset_threshold=0.5, velocity_scale=100,
-                                min_note_length=3, tempo=120.0, hop_time=0.01):
+def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5, tempo=120.0):
     """
-    Convert model predictions to a MIDI file using onset-offset-velocity representation
+    Convert model predictions to a MIDI file using note presence and velocity representation
     
     Args:
         predictions: Model predictions, can be:
                     - A single array with shape (time_steps, pitch_bins*3)
-                    - A tuple of (onset_preds, offset_preds, velocity_preds) each with shape (time_steps, 88)
+                    - A tuple of (note_presence, velocity) each with shape (time_steps, 88)
         output_file: Output MIDI file path
         onset_threshold: Threshold for detecting note onsets
-        offset_threshold: Threshold for detecting note offsets
-        velocity_scale: Scaling factor for velocity (0-127)
-        min_note_length: Minimum note length in frames
         tempo: Tempo of the output MIDI file in BPM
-        hop_time: Time between consecutive frames in seconds
     """
-    # Create a PrettyMIDI object
+    # Create MIDI file
     midi_data = pretty_midi.PrettyMIDI(initial_tempo=tempo)
+    piano = pretty_midi.Instrument(program=0)  # Piano
     
-    # Create a piano instrument
-    piano = pretty_midi.Instrument(program=0, is_drum=False, name="Piano")
+    # Get predictions
+    note_presence, velocity = predictions
     
-    # Handle different input formats
-    num_pitches = 88
-    
-    if isinstance(predictions, tuple) and len(predictions) == 3:
-        # Separate predictions for onset, offset, velocity
-        onset_predictions, offset_predictions, velocity_predictions = predictions
+    # Convert to probabilities if needed, using sigmoid
+    if np.max(np.abs(note_presence)) > 1.0:
+        note_presence = 1.0 / (1.0 + np.exp(-note_presence))
+
+    # Process each time step
+    for t in range(len(note_presence)):
+        # Find active notes
+        active_notes = np.where(note_presence[t] > threshold)[0]
         
-        # Apply sigmoid to convert logits to probabilities if needed
-        if isinstance(onset_predictions, np.ndarray) and np.max(np.abs(onset_predictions)) > 1.0:
-            onset_predictions = 1.0 / (1.0 + np.exp(-onset_predictions))  # Apply sigmoid
-        
-        if isinstance(offset_predictions, np.ndarray) and np.max(np.abs(offset_predictions)) > 1.0:
-            offset_predictions = 1.0 / (1.0 + np.exp(-offset_predictions))  # Apply sigmoid
-            
-        if isinstance(velocity_predictions, np.ndarray) and np.max(np.abs(velocity_predictions)) > 1.0:
-            velocity_predictions = 1.0 / (1.0 + np.exp(-velocity_predictions))  # Apply sigmoid
-    
-    elif isinstance(predictions, np.ndarray):
-        if predictions.shape[1] == num_pitches * 3:
-            # Multi-task output in single array: [onset, offset, velocity] for each pitch
-            onset_predictions = predictions[:, :num_pitches]
-            offset_predictions = predictions[:, num_pitches:2*num_pitches]
-            velocity_predictions = predictions[:, 2*num_pitches:3*num_pitches]
-            
-            # Apply sigmoid to convert logits to probabilities if needed
-            if np.max(np.abs(onset_predictions)) > 1.0:
-                onset_predictions = 1.0 / (1.0 + np.exp(-onset_predictions))
-            
-            if np.max(np.abs(offset_predictions)) > 1.0:
-                offset_predictions = 1.0 / (1.0 + np.exp(-offset_predictions))
-                
-            if np.max(np.abs(velocity_predictions)) > 1.0:
-                velocity_predictions = 1.0 / (1.0 + np.exp(-velocity_predictions))
-        else:
-            # Single-task output: treat as frame activation and derive onset/offset
-            frame_predictions = predictions
-            
-            # Apply sigmoid if needed
-            if np.max(np.abs(frame_predictions)) > 1.0:
-                frame_predictions = 1.0 / (1.0 + np.exp(-frame_predictions))
-            
-            # Derive onset predictions
-            onset_predictions = np.zeros_like(frame_predictions)
-            onset_predictions[1:] = np.maximum(0, frame_predictions[1:] - frame_predictions[:-1])
-            
-            # Derive offset predictions
-            offset_predictions = np.zeros_like(frame_predictions)
-            offset_predictions[:-1] = np.maximum(0, frame_predictions[:-1] - frame_predictions[1:])
-            
-            # Use frame activations as velocity
-            velocity_predictions = frame_predictions
-    else:
-        raise ValueError("Predictions must be a tuple of (onset, offset, velocity) or a single array")
-    
-    # Track active notes for each pitch
-    active_notes = {}  # {pitch: (start_time, velocity)}
-    
-    # Process each frame for note events
-    for frame in range(len(onset_predictions)):
-        frame_time = frame * hop_time
-        
-        # Check for note onsets
-        for pitch in range(num_pitches):
-            # Note onset detected
-            if onset_predictions[frame, pitch] > onset_threshold:
-                # Store onset information
-                velocity_value = velocity_predictions[frame, pitch]
-                active_notes[pitch] = (frame_time, velocity_value)
-            
-            # Note offset detected
-            elif pitch in active_notes and offset_predictions[frame, pitch] > offset_threshold:
-                # Get onset information
-                start_time, velocity_value = active_notes[pitch]
-                
-                # Calculate duration
-                duration = frame_time - start_time
-                
-                # Only add note if it's long enough
-                if duration >= min_note_length * hop_time:
-                    # Scale velocity to MIDI range (0-127)
-                    velocity = max(1, min(127, int(velocity_value * velocity_scale)))
-                    
-                    # Create MIDI note
-                    note = pretty_midi.Note(
-                        velocity=velocity,
-                        pitch=pitch + 21,  # MIDI pitches start at 21 (A0)
-                        start=start_time,
-                        end=frame_time
-                    )
-                    
-                    # Add to piano
-                    piano.notes.append(note)
-                
-                # Remove from active notes
-                del active_notes[pitch]
-    
-    # Handle notes that are still active at the end
-    end_time = len(onset_predictions) * hop_time
-    for pitch, (start_time, velocity_value) in active_notes.items():
-        # Calculate duration
-        duration = end_time - start_time
-        
-        # Only add note if it's long enough
-        if duration >= min_note_length * hop_time:
-            # Scale velocity to MIDI range (0-127)
-            velocity = max(1, min(127, int(velocity_value * velocity_scale)))
-            
+        for note in active_notes:
             # Create MIDI note
-            note = pretty_midi.Note(
-                velocity=velocity,
-                pitch=pitch + 21,  # MIDI pitches start at 21 (A0)
-                start=start_time,
-                end=end_time
+            midi_note = pretty_midi.Note(
+                velocity=int(velocity[t, note] * 127),  # Scale to MIDI velocity range
+                pitch=note + 21,  # Convert to MIDI pitch (A0 = 21)
+                start=t * 0.01,  # 10ms per frame
+                end=(t + 1) * 0.01
             )
-            
-            # Add to piano
-            piano.notes.append(note)
+            piano.notes.append(midi_note)
     
-    # Add the instrument to the PrettyMIDI object
+    # Add piano to MIDI file and save
     midi_data.instruments.append(piano)
-    
-    # Write out the MIDI data
     midi_data.write(output_file)
     
     return midi_data
@@ -732,17 +578,9 @@ def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5,
 # ===== Transcription System =====
 
 class PianoTranscriptionSystem:
-    """
-    Piano transcription system using the trained model
-    """
+    
     def __init__(self, model_path=None, device='cuda' if torch.cuda.is_available() else 'cpu'):
-        """
-        Initialize the transcription system
         
-        Args:
-            model_path: Path to the pretrained model (if None, a random model will be created)
-            device: Device to run the model on ('cuda' or 'cpu')
-        """
         self.device = device
         
         # Create model
@@ -760,20 +598,7 @@ class PianoTranscriptionSystem:
     
     def transcribe(self, audio_file, output_midi_file, sample_rate=16000, 
                    n_fft=2048, hop_length=512, n_cqt_bins=84):
-        """
-        Transcribe audio file to MIDI
-        
-        Args:
-            audio_file: Path to audio file
-            output_midi_file: Path to output MIDI file
-            sample_rate: Audio sample rate
-            n_fft: FFT window size
-            hop_length: Hop length for feature extraction
-            n_cqt_bins: Number of CQT bins
-            
-        Returns:
-            Path to output MIDI file
-        """
+
         print(f"Transcribing {audio_file} to {output_midi_file}")
         
         # Extract features
@@ -790,16 +615,12 @@ class PianoTranscriptionSystem:
         
         # Run model
         with torch.no_grad():
-            onset_logits, offset_logits, velocity_logits = self.model(features)
+            note_presence_logits, velocity = self.model(features)
+        note_presence = note_presence_logits.squeeze(0).cpu().numpy()
+        velocity = velocity_logits.squeeze(0).cpu().numpy()
         
-        # Convert logits to numpy arrays
-        onset_logits = onset_logits.squeeze(0).cpu().numpy()
-        offset_logits = offset_logits.squeeze(0).cpu().numpy()
-        velocity_logits = velocity_logits.squeeze(0).cpu().numpy()
-        
-        # Create MIDI file
         midi_data = create_midi_from_predictions(
-            (onset_logits, offset_logits, velocity_logits),
+            (note_presence, velocity),
             output_file=output_midi_file,
             hop_time=hop_length / sample_rate  # Convert hop length to time
         )
