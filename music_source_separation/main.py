@@ -9,6 +9,7 @@ import pretty_midi
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import pickle
 
 from piano_transformer import PianoTransformer, process_audio_file, notes_to_midi
 
@@ -148,19 +149,33 @@ def prepare_output_directory(output_dir_path):
 
 # Load audio from path and return (Path, features)
 def load_and_process_audio(audio_file_path, sample_rate, hop_length, n_cqt_bins):
-    # Process input audio
+    """
+    Load features from features/ if available, otherwise process audio and save features.
+    """
     audio_path = Path(audio_file_path)
-    
     if not audio_path.exists():
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
-    
-    # Process audio to extract features
-    audio_features = process_audio_file(
-        audio_path,
-        sample_rate=sample_rate,
-        hop_length=hop_length,
-        n_cqt_bins=n_cqt_bins
-    )
+
+    # Determine features directory and feature file path
+    features_dir = audio_path.parent / 'features'
+    features_dir.mkdir(exist_ok=True)
+    feature_file = features_dir / f"{audio_path.stem}_features.pkl"
+
+    # Try to load precomputed features
+    if feature_file.exists():
+        print(f"Loading precomputed features from {feature_file}")
+        with open(feature_file, 'rb') as f:
+            audio_features = pickle.load(f)
+    else:
+        print(f"No precomputed features found. Processing audio and saving to {feature_file}")
+        audio_features = process_audio_file(
+            audio_path,
+            sample_rate=sample_rate,
+            hop_length=hop_length,
+            n_cqt_bins=n_cqt_bins
+        )
+        with open(feature_file, 'wb') as f:
+            pickle.dump(audio_features, f)
     return audio_path, audio_features
 
 # Run full inference pipeline and generate outputs (MIDI, piano roll, stats)
