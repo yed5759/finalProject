@@ -43,23 +43,16 @@ def create_model(args, device):
     return model
 
 def create_datasets_and_loaders(args):
-    # Create datasets
+    # Create datasets using precomputed features
     train_dataset = PianoTranscriptionDataset(
-        audio_dir=Path(args.data_dir) / 'train' / 'audio',
+        features_dir=Path(args.data_dir) / 'features' / 'train',
         midi_dir=Path(args.data_dir) / 'train' / 'midi',
-        segment_length=args.segment_length,
-        hop_length=args.hop_length,
-        sample_rate=args.sample_rate,
-        n_cqt_bins=args.n_cqt_bins
+        segment_length=args.segment_length
     )
     val_dataset = PianoTranscriptionDataset(
-        audio_dir=Path(args.data_dir) / 'val' / 'audio',
+        features_dir=Path(args.data_dir) / 'features' / 'val',
         midi_dir=Path(args.data_dir) / 'val' / 'midi',
-        segment_length=args.segment_length,
-        hop_length=args.hop_length,
-        sample_rate=args.sample_rate,
-        n_cqt_bins=args.n_cqt_bins,
-        random_offset=False
+        segment_length=args.segment_length
     )
     # Create dataloaders
     train_loader = DataLoader(
@@ -67,7 +60,6 @@ def create_datasets_and_loaders(args):
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        collate_fn=collate_fn,
         pin_memory=True,
         drop_last=True
     )
@@ -76,7 +68,6 @@ def create_datasets_and_loaders(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        collate_fn=collate_fn,
         pin_memory=True
     )
     return train_loader, val_loader
