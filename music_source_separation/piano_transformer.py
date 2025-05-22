@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import math
 import os
 import librosa
 import pretty_midi
@@ -24,7 +25,7 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-np.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
+        pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
 
     def forward(self, x):
@@ -32,7 +33,7 @@ class PositionalEncoding(nn.Module):
         Args:
             x: Input tensor of shape [seq_len, batch_size, embed_dim]
         """
-        seq_len = x.size(0)
+        seq_len = x.size(1)
         
         # Handle case where sequence is longer than max_len
         if seq_len > self.max_len:
@@ -46,8 +47,7 @@ class PositionalEncoding(nn.Module):
             # This means positions beyond max_len will start repeating their encoding pattern
             for pos in range(self.max_len, seq_len, self.max_len):
                 end_pos = min(pos + self.max_len, seq_len)
-                pattern_len = end_pos - pos
-                x[pos:end_pos] = x[pos:end_pos] + self.pe[:pattern_len]
+                x[:, pos:end_pos, :] += self.pe[:, :end_pos - pos,:]
         else:
             # Standard case: sequence length is within max_len
             x = x + self.pe[:seq_len]
@@ -55,18 +55,17 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class PianoTransformer(nn.Module):
-    """
-    Transformer model for piano transcription with separate onset, offset, and velocity predictions
-    """
     def __init__(self, n_cqt_bins=88, hidden_dim=256, num_heads=4, num_layers=3, 
                  dropout=0.1, max_len=1000):
         super(PianoTransformer, self).__init__()
         
-        input_dim = n_cqt_bins + 1  # CQT bins + velocity features
+        input_dim = n_cqt_bins # CQT bins
         self.hidden_dim = hidden_dim
         
         # Input embedding
         self.embedding = nn.Linear(input_dim, hidden_dim)
+
+        self.input_norm = nn.LayerNorm(hidden_dim)
         
         # Positional encoding
         self.pos_encoder = PositionalEncoding(hidden_dim, dropout, max_len)
@@ -98,7 +97,9 @@ class PianoTransformer(nn.Module):
         
         # Initialize output layer biases to small positive values
         # This gives a small positive bias to the logits, which helps with the initial predictions
-        nn.init.constant_(self.note_layer.bias, 0.1)
+        # beacause the notes presences per frame are sparse (mostly 0) we need higher constant. 
+        # changed it from 0.1 to 1.0. chatGPT say we should try also 2.0, 3.0 ...
+        nn.init.constant_(self.note_layer.bias, 1.0)
     
     def forward(self, src, src_mask=None):
         """
@@ -115,14 +116,12 @@ class PianoTransformer(nn.Module):
         # With batch_first=True, we don't need to transpose the input
         
         # Embed input
-        src = self.embedding(src) * np.sqrt(self.hidden_dim)
+        src = self.input_norm(self.embedding(src) * math.sqrt(self.hidden_dim))
         
         # Add positional encoding - need to adapt this for batch_first=True
         # The positional encoding expects [seq_len, batch_size, hidden_dim]
         # So we transpose, add positional encoding, and transpose back
-        src = src.transpose(0, 1)
         src = self.pos_encoder(src)
-        src = src.transpose(0, 1)  # Back to [batch_size, seq_len, hidden_dim]
         
         # Pass through transformer encoder
         output = self.transformer_encoder(src, src_mask)
@@ -131,7 +130,7 @@ class PianoTransformer(nn.Module):
         note_presence = self.note_layer(output)
         
         # Return logits (without sigmoid) for loss function
-        return note_presence, None  # Only note presence, velocity is None
+        return note_presence
 
 # ===== Dataset for Training =====
 
@@ -200,7 +199,7 @@ class PianoTranscriptionDataset(Dataset):
 
 # ===== MIDI Utilities =====
 
-def create_midi_from_predictions(predictions, output_file, threshold=0.5, tempo=120.0):
+def create_midi_from_predictions(note_presence, output_file, threshold=0.5, tempo=120.0, velocity=80):
     """
     Convert model predictions to a MIDI file using note presence and velocity representation
     
@@ -216,9 +215,6 @@ def create_midi_from_predictions(predictions, output_file, threshold=0.5, tempo=
     midi_data = pretty_midi.PrettyMIDI(initial_tempo=tempo)
     piano = pretty_midi.Instrument(program=0)  # Piano
     
-    # Get predictions
-    note_presence, velocity = predictions
-    
     # Convert to probabilities if needed, using sigmoid
     if np.max(np.abs(note_presence)) > 1.0:
         note_presence = 1.0 / (1.0 + np.exp(-note_presence))
@@ -230,8 +226,9 @@ def create_midi_from_predictions(predictions, output_file, threshold=0.5, tempo=
         
         for note in active_notes:
             # Create MIDI note
+            vel = int(velocity[t, note] * 127) if isinstance(velocity, (np.ndarray, torch.Tensor)) else velocity
             midi_note = pretty_midi.Note(
-                velocity=int(velocity[t, note] * 127),  # Scale to MIDI velocity range
+                velocity=vel,  # Scale to MIDI velocity range
                 pitch=note + 21,  # Convert to MIDI pitch (A0 = 21)
                 start=t * 0.01,  # 10ms per frame
                 end=(t + 1) * 0.01
@@ -266,7 +263,7 @@ class PianoTranscriptionSystem:
         self.model.eval()
     
     def transcribe(self, audio_file, output_midi_file, sample_rate=16000, 
-                   n_fft=2048, hop_length=512, n_cqt_bins=84):
+                   n_fft=2048, hop_length=512, n_cqt_bins=88):
 
         print(f"Transcribing {audio_file} to {output_midi_file}")
         
@@ -284,7 +281,7 @@ class PianoTranscriptionSystem:
         
         # Run model
         with torch.no_grad():
-            note_presence = self.model(features)[0]
+            note_presence = self.model(features)
         
         midi_data = create_midi_from_predictions(
             note_presence,
