@@ -1,7 +1,7 @@
 'use client';
 
-import {Renderer, Stave, StaveNote, Voice, Formatter} from 'vexflow';
-import '../styles/Notes.css'
+import { Renderer, Stave, StaveNote, Voice, Formatter } from 'vexflow';
+import '../../styles/Notes.css'
 import CustomModal from '../../components/modal'
 
 export default function Notes() {
@@ -11,9 +11,9 @@ export default function Notes() {
             <div className="underline"></div>
 
             <div className="d-flex gap-3 mt-4">
-                <button type="button" className="btn" style={{width: '10pc', background: "#d59efb"}} data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save Notes</button>
-                <button className="btn" style={{width: '10pc', background: "#5ac9d6"}}>Edit Notes</button>
-                <button className="btn" style={{width: '10pc', background: "#59cf59"}}>Download</button>
+                <button type="button" className="btn" style={{ width: '10pc', background: "#d59efb" }} data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save Notes</button>
+                <button className="btn" style={{ width: '10pc', background: "#5ac9d6" }}>Edit Notes</button>
+                <button className="btn" style={{ width: '10pc', background: "#59cf59" }}>Download</button>
             </div>
             <CustomModal />
         </div>

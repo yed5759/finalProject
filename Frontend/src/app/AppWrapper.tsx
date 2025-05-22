@@ -27,9 +27,12 @@ export const AppWrapper = ({ children }: PropsWithChildren) => {
     // Don't render anything until we know if the user is authenticated
     if (isAuthenticated === null) return null;
 
+    const showNavbarPages = ['/home', '/MyLibrary', '/Notes'];
+    const showNavbar = isAuthenticated && showNavbarPages.includes(pathname);
+
     return (
         <div className="flex" style={{ width: "100%" }}>
-            {isAuthenticated && <Navbar />}
+            {showNavbar && <Navbar />}
             <main className="flex-1">
                 {children}
             </main>
