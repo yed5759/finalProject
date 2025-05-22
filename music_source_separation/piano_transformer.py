@@ -200,7 +200,7 @@ class PianoTranscriptionDataset(Dataset):
 
 # ===== MIDI Utilities =====
 
-def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5, tempo=120.0):
+def create_midi_from_predictions(predictions, output_file, threshold=0.5, tempo=120.0):
     """
     Convert model predictions to a MIDI file using note presence and velocity representation
     
@@ -209,7 +209,7 @@ def create_midi_from_predictions(predictions, output_file, onset_threshold=0.5, 
                     - A single array with shape (time_steps, pitch_bins*3)
                     - A tuple of (note_presence, velocity) each with shape (time_steps, 88)
         output_file: Output MIDI file path
-        onset_threshold: Threshold for detecting note onsets
+        threshold: Threshold for detecting note onsets
         tempo: Tempo of the output MIDI file in BPM
     """
     # Create MIDI file
