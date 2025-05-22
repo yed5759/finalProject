@@ -94,7 +94,7 @@ export default function MyLibrary() {
             <div style={{ margin: '20px 60px' }}>
                 <input
                     type="text"
-                    placeholder="Search for song, artist, or tag" // changed placeholder text to English
+                    placeholder="Search for song, artist, or tag"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     style={{
