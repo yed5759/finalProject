@@ -1,7 +1,9 @@
 import os
 import re
+import shutil
 import time
 import subprocess
+from pathlib import Path
 
 from dotenv import load_dotenv
 import yt_dlp
@@ -11,14 +13,22 @@ import boto3
 handle downloading of the audio from youtube if not already downloaded.
 give a timestamp for every audio.
 """
+openssl = shutil.which("openssl")
+base_dir = Path(__file__).resolve().parent  # .../Backend/utils
+key_path = base_dir/ "secret.key"
+enc_file = base_dir / ".env.enc"
+out_file = base_dir / ".env"
+
+# Run decryption
 subprocess.run([
-    "openssl", "enc", "-aes-256-cbc", "-d",
-    "-in", ".env.enc", "-out", ".env",
-    "-pass", "file:../secret.key"
+    openssl, "enc", "-aes-256-cbc", "-d", "-pbkdf2",
+    "-in", str(enc_file),
+    "-out", str(out_file),
+    "-pass", f"file:{key_path}"
 ], check=True)
 
 load_dotenv()
-os.remove("../.env.enc")
+os.remove(out_file)
 
 s3 = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb', region_name='eu-north-1')
@@ -58,7 +68,7 @@ def download_audio(url):
                            Key=f"uploads/{song_key}")
             local_file = f"../Backend/temp/{song_key}"
             s3.download_file("songscache", f"upload/{song_key}", local_file)
-            return local_file
+            return local_file, song_key
 
         # download file
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -76,10 +86,11 @@ def download_audio(url):
             'Song URL': url,
             'expire time': int(time.time()) + (10 * 24 * 60 * 60)
         })
-        return name
+        return name, song_key
 
     except Exception as e:
         print(f"Error downloading audio: {e}")
+        return None, None
 
 
 def sanitize_filename(filename):
