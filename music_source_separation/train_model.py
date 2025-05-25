@@ -4,41 +4,107 @@ from torch.utils.data import DataLoader
 from piano_transformer import PianoTransformer, PianoTranscriptionDataset
 import argparse
 from pathlib import Path
+import pickle
+import numpy
+
+def load_or_extract_features(audio_path, feature_path, extractor_fn, extractor_args, fallback_shape=(100, 88)):
+    """
+    Load features from cache if available, or extract and cache them.
+
+    Args:
+        audio_path (Path): Path to the input audio file
+        feature_path (Path): Path to the cached .pkl feature file
+        extractor_fn (callable): Function to extract features (e.g., process_audio_file)
+        extractor_args (dict): Arguments to pass to extractor_fn
+        fallback_shape (tuple): Shape of dummy fallback in case of failure
+
+    Returns:
+        np.ndarray: Feature matrix
+    """
+    if feature_path.exists():
+        try:
+            with open(feature_path, 'rb') as f:
+                return pickle.load(f)
+        except Exception as e:
+            print(f"[ERROR] Failed to load cached features for {audio_path.name}: {e}")
+            print("Recomputing features...")
+
+    try:
+        print(f"Extracting features for {audio_path.name}...")
+        features = extractor_fn(audio_path, **extractor_args)
+
+        with open(feature_path, 'wb') as f:
+            pickle.dump(features, f)
+        print(f"Features cached to {feature_path}")
+        return features
+    except Exception as e:
+        print(f"[ERROR] Feature extraction failed for {audio_path.name}: {e}")
+        return np.zeros(fallback_shape, dtype=np.float32)
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def get_model(device):
+def get_model(args, device):
     return PianoTransformer().to(device)
 
 def get_dataloader(args):
+    # Use audio and MIDI directories directly
+    audio_dir = Path(args.data_dir) / 'train' / 'audio'
+    midi_dir = Path(args.data_dir) / 'train' / 'midi'
+    features_dir = Path(args.data_dir) / 'features' / 'train'
+    
+    # Check if directories exist
+    if not audio_dir.exists():
+        raise FileNotFoundError(f"Audio directory not found: {audio_dir}")
+    if not midi_dir.exists():
+        raise FileNotFoundError(f"MIDI directory not found: {midi_dir}")
+    
+    # Check for audio files
+    audio_files = list(audio_dir.glob('*.wav'))
+    if not audio_files:
+        raise FileNotFoundError(f"No audio files found in {audio_dir}")
+    
+    print(f"Found {len(audio_files)} audio files in training directory")
+    
     dataset = PianoTranscriptionDataset(
-        features_dir=Path(args.data_dir) / 'features' / 'train',
-        midi_dir=Path(args.data_dir) / 'train' / 'midi',
-        segment_length=args.segment_length
+        audio_dir=audio_dir,
+        midi_dir=midi_dir,
+        features_dir=features_dir,
+        segment_length=args.segment_length,
     )
-    return DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    
+    if len(dataset) == 0:
+        raise ValueError("Dataset is empty. Check that your audio and MIDI files match correctly.")
+    
+    return DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
 
 def train_one_epoch(model, loader, optimizer, criterion, device):
     model.train()
     total_loss = 0
-    for features, targets in loader:
+    for batch_idx, (features, targets) in enumerate(loader):
         features, targets = features.to(device), targets.to(device)
         #Gradient accumulation in PyTorch so we need to zero the gradients
         optimizer.zero_grad()
-        note_presence, _ = model(features)
+        note_presence = model(features)
         loss = criterion(note_presence, targets)  # Compute loss
         loss.backward()                           # Compute gradients (backpropagation)
         optimizer.step()                          # Update parameters using gradients
         total_loss += loss.item()
+        # Print progress every 10 batches
+        if batch_idx % 10 == 0:
+            print(f"  Batch {batch_idx}/{len(loader)}, Loss: {loss.item():.4f}")
     return total_loss / len(loader)
 
 def train(args):
     device = get_device()
-    model = get_model(device)
+    print(f"Using device: {device}")
+    model = get_model(args, device)
+    print(f"Model created with {sum(p.numel() for p in model.parameters())} parameters")
     loader = get_dataloader(args)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = torch.nn.BCEWithLogitsLoss()
+
+    print(f"Starting training for {args.epochs} epochs...")
 
     for epoch in range(args.epochs):
         avg_loss = train_one_epoch(model, loader, optimizer, criterion, device)

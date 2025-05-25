@@ -1,486 +1,204 @@
 #!/usr/bin/env python3
 
-import os
 import torch
-import argparse
 import numpy as np
-import matplotlib.pyplot as plt
 import pretty_midi
 from pathlib import Path
-from tqdm import tqdm
-from sklearn.metrics import precision_recall_fscore_support, mean_squared_error
-import shutil
-import gc
+from piano_transformer import PianoTransformer, process_audio_file
 
-from piano_transformer import PianoTransformer, process_audio_file, midi_to_piano_roll
-
-def load_model(args, device):
-    model_path = Path(args.model_path)
-    if not model_path.exists():
-        raise FileNotFoundError(f"Model file not found: {model_path}")
+def simple_evaluate():
+    """
+    Super simple evaluation: Test your model on ONE audio file and see how it did
+    """
+    print("🎹 SIMPLE PIANO TRANSCRIPTION EVALUATION")
+    print("="*50)
     
-    # Load checkpoint args or fallback to user args
-    n_cqt_bins = args.n_cqt_bins
-    hidden_dim = args.hidden_dim
-    num_layers = args.num_layers
-    num_heads = args.num_heads
-    dropout = args.dropout
+    # Step 1: Load your trained model
+    print("\n1️⃣ Loading your trained model...")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    # Determine model parameters (either from checkpoint or user arguments)
-    checkpoint = None
-    if model_path.suffix == '.pt':
-        try:
-            checkpoint = torch.load(model_path, map_location=device)
-            if isinstance(checkpoint, dict) and 'args' in checkpoint:
-                model_args = argparse.Namespace(**checkpoint['args'])
-                print("Loaded model parameters from checkpoint")
-                n_cqt_bins = model_args.n_cqt_bins
-                hidden_dim = model_args.hidden_dim
-                num_layers = model_args.num_layers
-                num_heads = model_args.num_heads
-                dropout = model_args.dropout
-        except Exception as e:
-            print(f"Error loading checkpoint arguments: {e}")
+    # Find your model file
+    model_files = list(Path('models/piano_transformer').glob('*.pt'))
+    if not model_files:
+        model_files = list(Path('.').glob('*.pt'))
     
-    # Create model
-    model = PianoTransformer(
-        n_cqt_bins=n_cqt_bins,
-        hidden_dim=hidden_dim,
-        num_layers=num_layers,
-        num_heads=num_heads,
-        dropout=dropout
-    ).to(device)
+    if not model_files:
+        print("❌ No model found! Train your model first.")
+        return
     
-    # Load model weights
-    if checkpoint and isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
-    else:
-        model.load_state_dict(torch.load(model_path, map_location=device))
+    model_path = model_files[0]  # Use the first model found
+    print(f"Using model: {model_path}")
+    
+    # Load the model (simple version)
+    model = PianoTransformer().to(device)
+    try:
+        checkpoint = torch.load(model_path, map_location=device)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            model.load_state_dict(checkpoint)
+        print("✅ Model loaded!")
+    except Exception as e:
+        print(f"❌ Error loading model: {e}")
+        return
     
     model.eval()
-    print("Model loaded successfully")
-    return model, n_cqt_bins
-
-def load_test_files(data_dir):
-    test_audio_dir = Path(data_dir) / 'test' / 'audio'
-    test_midi_dir = Path(data_dir) / 'test' / 'midi'
-    if not test_audio_dir.exists() or not test_midi_dir.exists():
-        raise FileNotFoundError(f"Test data not found in {data_dir}/test")
     
-    audio_files = sorted(list(test_audio_dir.glob('*.wav')))
-    midi_files = []
-    for audio_file in audio_files[:]:
-        midi_file = test_midi_dir / f"{audio_file.stem}.mid"
-        if midi_file.exists():
-            midi_files.append(midi_file)
-        else:
-            print(f"Warning: No matching MIDI file for {audio_file}")
-            audio_files.remove(audio_file)
-    print(f"Found {len(audio_files)} test files with matching MIDI")
-    return audio_files, midi_files
-
-def initialize_metrics():
-    return {
-        'onset_precision': [],
-        'onset_recall': [],
-        'onset_f1': [],
-        'offset_precision': [],
-        'offset_recall': [],
-        'offset_f1': [],
-        'velocity_rmse': []
-    }
-
-def predict_chunks(model, features, device, max_seq_len):
-    # Initialize prediction arrays
-    pred_onsets = np.zeros((len(features), 88))
-    pred_offsets = np.zeros((len(features), 88))
-    pred_velocities = np.zeros((len(features), 88))
-
-    # Process in chunks with overlap
-    chunk_size = max_seq_len
-    overlap = min(chunk_size // 4, 1000) # 25% overlap, max 1000 frames
-
-
-    for start_idx in range(0, len(features), chunk_size - overlap):
-        end_idx = min(start_idx + chunk_size, len(features))
-        chunk_features = features[start_idx:end_idx]
-        chunk_length = len(chunk_features)
-
-        # Convert to tensor and add batch dimension
-        chunk_tensor = torch.FloatTensor(chunk_features).unsqueeze(0).to(device)
-
-        # Make predictions
+    # Step 2: Find a test audio file
+    print("\n2️⃣ Finding a test audio file...")
+    test_files = list(Path('data/test/audio').glob('*.wav'))
+    if not test_files:
+        print("❌ No test files found! Put some .wav files in data/test/audio/")
+        return
+    
+    audio_file = test_files[0]  # Use the first test file
+    print(f"Testing on: {audio_file.name}")
+    
+    # Step 3: Extract features from the audio
+    print("\n3️⃣ Extracting features from audio...")
+    features = process_audio_file(audio_file)
+    print(f"Audio length: {len(features)} frames ({len(features)*512/16000:.1f} seconds)")
+    
+    # Step 4: Run your model to get predictions
+    print("\n4️⃣ Running your model...")
+    
+    # Handle long sequences by breaking them into chunks
+    max_length = 1000  # Maximum length your model can handle
+    
+    if len(features) <= max_length:
+        # Short audio - process all at once
+        print("Processing entire audio at once...")
+        features_tensor = torch.FloatTensor(features).unsqueeze(0).to(device)
+        
         with torch.no_grad():
-            chunk_onsets, chunk_offsets, chunk_velocities = model(chunk_tensor)
-
-        # Convert to numpy - no need for sigmoid as it's already applied in the model
-        chunk_onsets = chunk_onsets[0].cpu().numpy()
-        chunk_offsets = chunk_offsets[0].cpu().numpy()
-        chunk_velocities = chunk_velocities[0].cpu().numpy()
-
-        if start_idx == 0:
-            # First chunk
-            pred_onsets[:end_idx] = chunk_onsets
-            pred_offsets[:end_idx] = chunk_offsets
-            pred_velocities[:end_idx] = chunk_velocities
-        else:
-            # Handle overlap with linear blending
-            blend_start = start_idx
-            blend_end = min(start_idx + overlap, len(features))
-            blend_length = blend_end - blend_start
-
-            # Create linear weights for blending
-            old_weight = np.linspace(1, 0, blend_length).reshape(-1, 1)
-            new_weight = np.linspace(0, 1, blend_length).reshape(-1, 1)
-            
-            # Blend overlap region
-            pred_onsets[blend_start:blend_end] = old_weight * pred_onsets[blend_start:blend_end] + new_weight * chunk_onsets[:blend_length]
-            pred_offsets[blend_start:blend_end] = old_weight * pred_offsets[blend_start:blend_end] + new_weight * chunk_offsets[:blend_length]
-            pred_velocities[blend_start:blend_end] = old_weight * pred_velocities[blend_start:blend_end] + new_weight * chunk_velocities[:blend_length]
-
-            if end_idx > blend_end:
-                # Copy non-overlap region
-                pred_onsets[blend_end:end_idx] = chunk_onsets[blend_length:chunk_length]
-                pred_offsets[blend_end:end_idx] = chunk_offsets[blend_length:chunk_length]
-                pred_velocities[blend_end:end_idx] = chunk_velocities[blend_length:chunk_length]
-
-        # Free up GPU memory
-        del chunk_tensor, chunk_onsets, chunk_offsets, chunk_velocities
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-        # Report progress
-        progress = (end_idx / len(features)) * 100
-        print(f"  Processed {end_idx}/{len(features)} frames ({progress:.1f}%)")
-
-        # Check if we've reached the end
-        if end_idx == len(features):
-            break
-
-    return pred_onsets, pred_offsets, pred_velocities
-
-def predict_full(model, features, device):
-    # Convert to tensor and add batch dimension
-    audio_tensor = torch.FloatTensor(features).unsqueeze(0).to(device)
+            raw_predictions = model(features_tensor)
+            predictions = torch.sigmoid(raw_predictions)
+        
+        predictions = predictions[0].cpu().numpy()
     
-    # Make predictions
-    with torch.no_grad():
-        pred_onsets, pred_offsets, pred_velocities = model(audio_tensor)
-    
-    # Convert to numpy - no need for sigmoid as it's already applied in the model
-    pred_onsets = pred_onsets[0].cpu().numpy()
-    pred_offsets = pred_offsets[0].cpu().numpy()
-    pred_velocities = pred_velocities[0].cpu().numpy()
-    
-    # Free up GPU memory
-    del audio_tensor
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    
-    return pred_onsets, pred_offsets, pred_velocities
-
-def calculate_metrics(ground_truth_onsets, ground_truth_offsets, ground_truth_velocities,
-                      pred_onsets, pred_offsets, pred_velocities, args):
-    # Apply threshold to onsets/offsets
-    pred_onsets_binary = pred_onsets > args.onset_threshold
-    pred_offsets_binary = pred_offsets > args.offset_threshold
-
-    # Calculate metrics
-    # Flatten for sklearn metrics
-    gt_onsets_flat = ground_truth_onsets.flatten()
-    pred_onsets_flat = pred_onsets_binary.flatten()
-
-    gt_offsets_flat = ground_truth_offsets.flatten()
-    pred_offsets_flat = pred_offsets_binary.flatten()
-
-    # Only evaluate velocity on notes that exist (where onset=1)
-    mask = gt_onsets_flat > 0
-    gt_velocities_masked = ground_truth_velocities.flatten()[mask]
-    pred_velocities_masked = pred_velocities.flatten()[mask]
-
-    # Calculate precision, recall, F1
-    onset_precision, onset_recall, onset_f1, _ = precision_recall_fscore_support(
-        gt_onsets_flat, pred_onsets_flat, average='binary', zero_division=0
-    )
-    offset_precision, offset_recall, offset_f1, _ = precision_recall_fscore_support(
-        gt_offsets_flat, pred_offsets_flat, average='binary', zero_division=0
-    )
-
-    # Calculate velocity RMSE
-    if len(gt_velocities_masked) > 0:
-        velocity_rmse = np.sqrt(mean_squared_error(gt_velocities_masked, pred_velocities_masked))
     else:
-        velocity_rmse = float('nan')
-
-    return {
-        'onset_precision': onset_precision,
-        'onset_recall': onset_recall,
-        'onset_f1': onset_f1,
-        'offset_precision': offset_precision,
-        'offset_recall': offset_recall,
-        'offset_f1': offset_f1,
-        'velocity_rmse': velocity_rmse
-    }
-
-def evaluate_model(args):
-    device = torch.device('cuda' if torch.cuda.is_available() and not args.cpu else 'cpu')
-    print(f"Using device: {device}")
-    
-    # Load model
-    model, n_cqt_bins = load_model(args, device)
-    
-    # Create output directory
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Get test files
-    audio_files, midi_files = load_test_files(args.data_dir)
-    
-    # Evaluation metrics
-    metrics = initialize_metrics()
-    
-    # Process each test file
-    for i, (audio_file, midi_file) in enumerate(zip(audio_files, midi_files)):
-        print(f"\nProcessing file {i+1}/{len(audio_files)}: {audio_file.name}")
+        # Long audio - process in chunks
+        print(f"Audio is long ({len(features)} frames), processing in chunks...")
+        predictions = np.zeros((len(features), 88))
         
-        # Process audio
-        audio_features = process_audio_file(
-            audio_file, 
-            sample_rate=args.sample_rate,
-            hop_length=args.hop_length,
-            n_cqt_bins=n_cqt_bins
-        )
+        # Process in overlapping chunks
+        chunk_size = max_length
+        overlap = 200  # Small overlap between chunks
         
-        # Get ground truth piano roll
-        ground_truth_midi = pretty_midi.PrettyMIDI(str(midi_file))
-        ground_truth_onsets, ground_truth_offsets, ground_truth_velocities = midi_to_piano_roll(
-            ground_truth_midi,
-            hop_length=args.hop_length,
-            sample_rate=args.sample_rate,
-            roll_length=len(audio_features)
-        )
-        
-        # Handle long sequences with chunking if needed
-        if len(audio_features) > args.max_sequence_length:
-            print(f"Long sequence detected: {len(audio_features)} frames. Using chunked processing.")
+        for start in range(0, len(features), chunk_size - overlap):
+            end = min(start + chunk_size, len(features))
+            chunk = features[start:end]
             
-            pred_onsets, pred_offsets, pred_velocities = predict_chunks(
-                model, audio_features, device, args.max_sequence_length
-            )
+            print(f"  Processing chunk {start}-{end} ({len(chunk)} frames)")
+            
+            # Run model on this chunk
+            chunk_tensor = torch.FloatTensor(chunk).unsqueeze(0).to(device)
+            with torch.no_grad():
+                chunk_pred = model(chunk_tensor)
+                chunk_pred = torch.sigmoid(chunk_pred)
+            
+            chunk_pred = chunk_pred[0].cpu().numpy()
+            
+            # Store predictions (simple - just overwrite overlaps)
+            predictions[start:end] = chunk_pred
+    
+    print(f"Predictions shape: {predictions.shape}")
+    print(f"Prediction range: {predictions.min():.3f} to {predictions.max():.3f}")
+    
+    # Step 5: Load the correct answer (ground truth)
+    print("\n5️⃣ Loading the correct answer...")
+    midi_file = Path('data/test/midi') / f"{audio_file.stem}.mid"
+    
+    if not midi_file.exists():
+        print(f"❌ No MIDI file found: {midi_file}")
+        print("⚠️  Can't compare accuracy, but model is working!")
+        show_predictions(predictions)
+        return
+    
+    # Convert MIDI to the same format as predictions
+    midi_data = pretty_midi.PrettyMIDI(str(midi_file))
+    piano_roll = midi_data.get_piano_roll(fs=16000/512)  # Same timing as features
+    piano_roll = piano_roll[21:109]  # Piano keys only (88 keys)
+    piano_roll = piano_roll.T  # Make it [time, keys]
+    
+    # Make sure both have same length
+    min_length = min(len(predictions), len(piano_roll))
+    predictions = predictions[:min_length]
+    piano_roll = piano_roll[:min_length]
+    
+    # Convert to binary (0 or 1) - "Is this note playing?"
+    ground_truth = (piano_roll > 0).astype(float)
+    predicted_notes = (predictions > 0.5).astype(float)  # 0.5 = threshold
+    
+    print(f"Comparison length: {min_length} frames")
+    
+    # Step 6: Compare and calculate how good your model is
+    print("\n6️⃣ Checking how well your model did...")
+    
+    # Count correct predictions
+    correct_predictions = (predicted_notes == ground_truth)
+    accuracy = correct_predictions.mean()
+    
+    # Count active notes
+    total_true_notes = ground_truth.sum()
+    total_predicted_notes = predicted_notes.sum()
+    
+    # Count hits and misses
+    true_positives = ((predicted_notes == 1) & (ground_truth == 1)).sum()
+    false_positives = ((predicted_notes == 1) & (ground_truth == 0)).sum()
+    false_negatives = ((predicted_notes == 0) & (ground_truth == 1)).sum()
+    
+    print(f"📊 RESULTS:")
+    print(f"   Overall Accuracy: {accuracy:.1%}")
+    print(f"   Correct Notes Found: {true_positives}/{total_true_notes} ({100*true_positives/max(total_true_notes,1):.1f}%)")
+    print(f"   Wrong Notes Added: {false_positives}")
+    print(f"   Notes Missed: {false_negatives}")
+    
+    # Step 7: Give a simple verdict
+    print(f"\n🎯 VERDICT:")
+    if accuracy > 0.95:
+        print("🟢 AMAZING! Your model is working excellently!")
+    elif accuracy > 0.90:
+        print("🟢 GREAT! Your model is working very well!")
+    elif accuracy > 0.85:
+        print("🟡 GOOD! Your model is working well!")
+    elif accuracy > 0.75:
+        print("🟠 OKAY! Your model is learning but could be better!")
+    else:
+        print("🔴 NEEDS WORK! Your model needs more training!")
+    
+    # Step 8: Show some examples
+    show_predictions(predictions, ground_truth)
 
-        else:
-            # For shorter sequences, process the entire audio at once
-            pred_onsets, pred_offsets, pred_velocities = predict_full(
-                model, audio_features, device
-            )
-
-        # Add debug output to see prediction statistics
-        print(f"Onset prediction stats - min: {pred_onsets.min():.4f}, max: {pred_onsets.max():.4f}, mean: {pred_onsets.mean():.4f}")
-        print(f"Offset prediction stats - min: {pred_offsets.min():.4f}, max: {pred_offsets.max():.4f}, mean: {pred_offsets.mean():.4f}")
-        print(f"Onset predictions > threshold: {(pred_onsets > args.onset_threshold).sum()} out of {pred_onsets.size}")
-        print(f"Offset predictions > threshold: {(pred_offsets > args.offset_threshold).sum()} out of {pred_offsets.size}")
-        print(f"Ground truth onset positives: {ground_truth_onsets.sum()} out of {ground_truth_onsets.size}")
-        print(f"Ground truth offset positives: {ground_truth_offsets.sum()} out of {ground_truth_offsets.size}")
-
-        # Evaluate performance
-        file_metrics = calculate_metrics(
-            ground_truth_onsets,
-            ground_truth_offsets,
-            ground_truth_velocities,
-            pred_onsets,
-            pred_offsets,
-            pred_velocities
-        )
-
-        # Store metrics
-        metrics['onset_precision'].append(file_metrics['onset_precision'])
-        metrics['onset_recall'].append(file_metrics['onset_recall'])
-        metrics['onset_f1'].append(file_metrics['onset_f1'])
-        metrics['offset_precision'].append(file_metrics['offset_precision'])
-        metrics['offset_recall'].append(file_metrics['offset_recall'])
-        metrics['offset_f1'].append(file_metrics['offset_f1'])
-        metrics['velocity_rmse'].append(file_metrics['velocity_rmse'])
-            
-        # Print metrics for this file
-        print(f"Onset - Precision: {file_metrics['onset_precision']:.4f}, Recall: {file_metrics['onset_recall']:.4f}, F1: {file_metrics['onset_f1']:.4f}")
-        print(f"Offset - Precision: {file_metrics['offset_precision']:.4f}, Recall: {file_metrics['offset_recall']:.4f}, F1: {file_metrics['offset_f1']:.4f}")
-        print(f"Velocity RMSE: {file_metrics['velocity_rmse']:.4f}")
+def show_predictions(predictions, ground_truth=None):
+    """Show what notes the model thinks are playing"""
+    print(f"\n🎵 WHAT YOUR MODEL HEARS:")
+    print("-" * 30)
+    
+    # Look at first 10 seconds (about 312 frames at 16kHz/512)
+    sample_frames = min(312, len(predictions))
+    
+    # Count how many notes are active in each frame
+    for i in range(0, sample_frames, 31):  # Every ~1 second
+        frame = predictions[i]
+        active_notes = (frame > 0.5).sum()
+        max_confidence = frame.max()
         
-        # Generate MIDI from predictions if requested
-        if args.generate_midi:
-            predicted_midi = notes_to_midi(
-                pred_onsets_binary,
-                pred_offsets_binary,
-                pred_velocities,
-                hop_length=args.hop_length,
-                sample_rate=args.sample_rate
-            )
-            
-            midi_path = output_dir / f"{audio_file.stem}_predicted.mid"
-            predicted_midi.write(str(midi_path))
-            print(f"Generated MIDI saved to {midi_path}")
-            
-            # Also save ground truth MIDI for comparison
-            truth_midi_path = output_dir / f"{audio_file.stem}_ground_truth.mid"
-            shutil.copy(midi_file, truth_midi_path)
+        second = i * 512 / 16000  # Convert frame to seconds
+        print(f"At {second:.1f}s: {active_notes} notes playing (max confidence: {max_confidence:.2f})")
         
-        # Generate and save piano roll visualizations if requested
-        if args.visualize:
-            # Generate piano roll visualization (simplified to save space)
-            plt.figure(figsize=(15, 10))
-            
-            # Plot predicted vs ground truth onsets (just a sample)
-            plt.subplot(2, 1, 1)
-            # Limit visualization to a reasonable range (first 1000 frames or less)
-            display_len = min(1000, len(audio_features))
-            plt.imshow(np.vstack([
-                ground_truth_onsets[:display_len, :].T,
-                np.zeros((5, display_len)),  # Add a separator
-                pred_onsets_binary[:display_len, :].T
-            ]), aspect='auto', cmap='Blues')
-            plt.title(f"Piano Roll: Ground Truth (top) vs Prediction (bottom) - First {display_len} frames")
-            plt.ylabel("MIDI Note")
-            
-            plt.subplot(2, 1, 2)
-            plt.plot(np.sum(ground_truth_onsets[:display_len], axis=1), label='Ground Truth Onsets')
-            plt.plot(np.sum(pred_onsets_binary[:display_len], axis=1), label='Predicted Onsets')
-            plt.xlabel("Time (frames)")
-            plt.ylabel("Number of active notes")
-            plt.legend()
-            
-            plt.tight_layout()
-            plt.savefig(output_dir / f"{audio_file.stem}_piano_roll.png")
-            plt.close()
-            
-        # Free up memory
-        del pred_onsets, pred_offsets, pred_velocities, pred_onsets_binary, pred_offsets_binary
-        del ground_truth_onsets, ground_truth_offsets, ground_truth_velocities
-        gc.collect()
+        # Show which specific notes if not too many
+        if active_notes <= 5 and active_notes > 0:
+            note_indices = np.where(frame > 0.5)[0]
+            note_names = [f"Key{idx}" for idx in note_indices]
+            print(f"         Notes: {', '.join(note_names)}")
     
-    # Calculate average metrics
-    avg_metrics = {k: np.nanmean(v) for k, v in metrics.items()}
-    
-    # Print summary
-    print("\nEvaluation Summary:")
-    print(f"Onset - Precision: {avg_metrics['onset_precision']:.4f}, Recall: {avg_metrics['onset_recall']:.4f}, F1: {avg_metrics['onset_f1']:.4f}")
-    print(f"Offset - Precision: {avg_metrics['offset_precision']:.4f}, Recall: {avg_metrics['offset_recall']:.4f}, F1: {avg_metrics['offset_f1']:.4f}")
-    print(f"Velocity RMSE: {avg_metrics['velocity_rmse']:.4f}")
-    
-    # Save metrics to file
-    with open(output_dir / "evaluation_metrics.txt", "w") as f:
-        f.write("Evaluation Metrics:\n")
-        f.write(f"Onset - Precision: {avg_metrics['onset_precision']:.4f}, Recall: {avg_metrics['onset_recall']:.4f}, F1: {avg_metrics['onset_f1']:.4f}\n")
-        f.write(f"Offset - Precision: {avg_metrics['offset_precision']:.4f}, Recall: {avg_metrics['offset_recall']:.4f}, F1: {avg_metrics['offset_f1']:.4f}\n")
-        f.write(f"Velocity RMSE: {avg_metrics['velocity_rmse']:.4f}\n")
-        
-        f.write("\nDetailed Metrics:\n")
-        for i, (audio_file, midi_file) in enumerate(zip(audio_files, midi_files)):
-            f.write(f"\nFile {i+1}: {audio_file.name}\n")
-            f.write(f"Onset - Precision: {metrics['onset_precision'][i]:.4f}, Recall: {metrics['onset_recall'][i]:.4f}, F1: {metrics['onset_f1'][i]:.4f}\n")
-            f.write(f"Offset - Precision: {metrics['offset_precision'][i]:.4f}, Recall: {metrics['offset_recall'][i]:.4f}, F1: {metrics['offset_f1'][i]:.4f}\n")
-            f.write(f"Velocity RMSE: {metrics['velocity_rmse'][i]:.4f}\n")
-    
-    print(f"Evaluation complete. Results saved to {output_dir}")
-
-def notes_to_midi(onsets, offsets, velocities, hop_length=512, sample_rate=16000):
-    """Convert piano roll matrices to MIDI file"""
-    # Create a PrettyMIDI object
-    midi = pretty_midi.PrettyMIDI()
-    piano = pretty_midi.Instrument(program=0)  # Piano
-    
-    # Frame timing
-    frame_time = hop_length / sample_rate
-    
-    # Iterate through each note (88 piano keys, starting from A0=21)
-    for note_idx in range(88):
-        midi_note = note_idx + 21  # A0 = 21
-        
-        # Find onset frames
-        onset_frames = np.where(onsets[:, note_idx])[0]
-        
-        # For each detected onset
-        for onset_frame in onset_frames:
-            # Find the next offset after this onset
-            offset_frames = np.where(offsets[onset_frame:, note_idx])[0]
-            
-            if len(offset_frames) > 0:
-                # Offset is relative to onset_frame, so add it back
-                offset_frame = offset_frames[0] + onset_frame
-            else:
-                # If no offset found, set to end of song
-                offset_frame = len(onsets) - 1
-            
-            # Convert frames to time
-            start_time = onset_frame * frame_time
-            end_time = offset_frame * frame_time
-            
-            # Ensure note has minimum duration
-            if end_time <= start_time:
-                end_time = start_time + 0.1  # Minimum 100ms note
-            
-            # Get velocity (scale to 0-127 for MIDI)
-            velocity = int(min(max(velocities[onset_frame, note_idx] * 127, 1), 127))
-            
-            # Create note
-            note = pretty_midi.Note(
-                velocity=velocity,
-                pitch=midi_note,
-                start=start_time,
-                end=end_time
-            )
-            
-            # Add note to instrument
-            piano.notes.append(note)
-    
-    # Add the instrument to the PrettyMIDI object
-    midi.instruments.append(piano)
-    return midi
-
-def main():
-    parser = argparse.ArgumentParser(description='Evaluate piano transcription model')
-    
-    # Data and model arguments
-    parser.add_argument('--model-path', type=str, required=True,
-                        help='Path to model checkpoint')
-    parser.add_argument('--data-dir', type=str, default='data',
-                        help='Directory containing test data')
-    parser.add_argument('--output-dir', type=str, default='output/evaluation',
-                        help='Directory to save evaluation results')
-    
-    # Model parameters (used if not found in checkpoint)
-    parser.add_argument('--n-cqt-bins', type=int, default=88,
-                        help='Number of CQT bins')
-    parser.add_argument('--hidden-dim', type=int, default=256,
-                        help='Hidden dimension of the model')
-    parser.add_argument('--num-layers', type=int, default=6,
-                        help='Number of transformer layers')
-    parser.add_argument('--num-heads', type=int, default=8,
-                        help='Number of attention heads')
-    parser.add_argument('--dropout', type=float, default=0.1,
-                        help='Dropout rate')
-    
-    # Audio parameters
-    parser.add_argument('--sample-rate', type=int, default=16000,
-                        help='Audio sample rate')
-    parser.add_argument('--hop-length', type=int, default=512,
-                        help='Hop length for feature extraction')
-    
-    # Evaluation parameters
-    parser.add_argument('--onset-threshold', type=float, default=0.5,
-                        help='Threshold for onset detection')
-    parser.add_argument('--offset-threshold', type=float, default=0.5,
-                        help='Threshold for offset detection')
-    parser.add_argument('--visualize', action='store_true',
-                        help='Generate piano roll visualizations')
-    parser.add_argument('--generate-midi', action='store_true',
-                        help='Generate MIDI files from predictions')
-    parser.add_argument('--cpu', action='store_true',
-                        help='Force CPU usage even if CUDA is available')
-    parser.add_argument('--max-sequence-length', type=int, default=10000,
-                        help='Maximum sequence length to process at once (longer sequences will be chunked)')
-    
-    args = parser.parse_args()
-    evaluate_model(args)
+    if ground_truth is not None:
+        print(f"\n📈 SUMMARY:")
+        avg_notes_true = ground_truth.mean(axis=0).sum()
+        avg_notes_pred = predictions.mean(axis=0).sum()
+        print(f"   Average notes playing (true): {avg_notes_true:.1f}")
+        print(f"   Average notes playing (predicted): {avg_notes_pred:.1f}")
 
 if __name__ == "__main__":
-    main() 
+    simple_evaluate()
