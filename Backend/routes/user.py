@@ -1,12 +1,26 @@
 # routes/user.py
 
-from fastapi import APIRouter, Depends
-from fastapi.security import OAuth2PasswordBearer
+from flask import Blueprint, request, jsonify
 from utils.user import get_user_by_token
 
-router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+user_routes = Blueprint("user", __name__)
 
-@router.get("/me")
-def get_me(token: str = Depends(oauth2_scheme)):
-    return get_user_by_token(token)
+# Helper to extract user from Authorization header
+def get_user_from_request():
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None, "Unauthorized"
+    token = auth_header.split(" ")[1]
+    try:
+        user = get_user_by_token(token)
+        return user, None
+    except Exception as e:
+        return None, str(e)
+
+# GET /me
+@user_routes.route("/me", methods=["GET"])
+def get_me():
+    user, error = get_user_from_request()
+    if error:
+        return jsonify({"error": error}), 401
+    return jsonify(user)

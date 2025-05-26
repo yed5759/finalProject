@@ -41,6 +41,32 @@ export default function MyLibrary() {
         alert(`Sharing song: ${song.title} by ${song.artist}`);
     };
 
+    //todo delete this place after testing
+    const handleAddConstSong = async () => {
+        try {
+            const res = await fetch("http://localhost:5000/songs/add-const", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${localStorage.getItem("token")}`, // adjust this if your token is stored elsewhere
+                },
+            });
+
+            if (!res.ok) throw new Error("Failed to add test song");
+
+            const data = await res.json();
+            setSongs(prevSongs => [...prevSongs, data.song]);
+        } catch (error) {
+            if (error instanceof Error) {
+                alert("Error adding test song: " + error.message);
+            } else {
+                alert("An unknown error occurred.");
+            }
+        }
+
+    };
+
+
     return (
         <>
             <h2 style={{ marginLeft: '70px' }}>My Library</h2>
@@ -60,6 +86,24 @@ export default function MyLibrary() {
                         border: '1px solid #ccc',
                     }}
                 />
+            </div>
+
+            {/* Add Const Song Button - מתחת לסרגל החיפוש */}
+            <div style={{ margin: '0 70px 20px 70px' }}>
+                <button
+                    onClick={handleAddConstSong}
+                    style={{
+                        padding: '10px 20px',
+                        fontSize: '16px',
+                        borderRadius: '4px',
+                        backgroundColor: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        cursor: 'pointer',
+                    }}
+                >
+                    Add Const Song
+                </button>
             </div>
 
             <div style={{ maxHeight: '500px', overflowY: 'scroll', border: '1px solid #ccc', padding: '10px', margin: '30px 70px' }}>

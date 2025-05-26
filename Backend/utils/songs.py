@@ -63,3 +63,14 @@ def get_song_by_id(user_id, song_id):
 
     raise ValueError("Song not found")
 
+# todo delete
+# Add a constant dummy song for testing purposes
+def add_const_song(user_id):
+    dummy_song = {
+        "title": "Test Song",
+        "artist": "Test Artist",
+        "notes": ["Test note 1", "Test note 2"],
+        "tags": ["test", "demo"]
+    }
+    return add_song_to_user(user_id, dummy_song)
+

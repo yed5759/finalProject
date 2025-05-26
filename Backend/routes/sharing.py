@@ -1,34 +1,60 @@
 # routes/sharing.py
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer
+from flask import Blueprint, request, jsonify
 from utils.user import get_user_by_token
 from utils.sharing import (
     share_song_to_user,
-    get_shared_songs_for_user, accept_shared_song
+    get_shared_songs_for_user, 
+    accept_shared_song
 )
-from utils.songs import add_song_to_user
-from typing import Dict
 
-router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+sharing_routes = Blueprint("sharing", __name__)
 
-@router.post("/share")
-def share_song(payload: Dict, token: str = Depends(oauth2_scheme)):
-    user = get_user_by_token(token)
+# Helper to extract user from request header
+def get_user_from_request():
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None, "Unauthorized"
+    token = auth_header.split(" ")[1]
+    try:
+        user = get_user_by_token(token)
+        return user, None
+    except Exception as e:
+        return None, str(e)
+
+# POST /share
+@sharing_routes.route("/share", methods=["POST"])
+def share_song():
+    user, error = get_user_from_request()
+    if error:
+        return jsonify({"error": error}), 401
+
+    payload = request.get_json()
     recipient_username = payload.get("username")
     song_data = payload.get("song")
+
     if not recipient_username or not song_data:
-        raise HTTPException(status_code=400, detail="Username and song data required")
+        return jsonify({"error": "Username and song data required"}), 400
+
     share_song_to_user(user["_id"], recipient_username, song_data)
-    return {"message": "Song shared"}
+    return jsonify({"message": "Song shared"})
 
-@router.get("/shared")
-def get_shared(token: str = Depends(oauth2_scheme)):
-    user = get_user_by_token(token)
-    return get_shared_songs_for_user(user["_id"])
+# GET /shared
+@sharing_routes.route("/shared", methods=["GET"])
+def get_shared():
+    user, error = get_user_from_request()
+    if error:
+        return jsonify({"error": error}), 401
 
-@router.post("/shared/accept/{song_id}")
-def accept_shared(song_id: str, token: str = Depends(oauth2_scheme)):
-    user = get_user_by_token(token)
-    return accept_shared_song(user["_id"], song_id)
+    shared_songs = get_shared_songs_for_user(user["_id"])
+    return jsonify(shared_songs)
+
+# POST /shared/accept/<song_id>
+@sharing_routes.route("/shared/accept/<song_id>", methods=["POST"])
+def accept_shared(song_id):
+    user, error = get_user_from_request()
+    if error:
+        return jsonify({"error": error}), 401
+
+    accepted_song = accept_shared_song(user["_id"], song_id)
+    return jsonify(accepted_song)
