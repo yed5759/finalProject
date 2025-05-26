@@ -11,7 +11,11 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import pickle
 
-from piano_transformer import PianoTransformer, process_audio_file, notes_to_midi
+from model import PianoTransformer
+from features import process_audio_file
+# from midi_utils import notes_to_midi
+
+
 
 # Parse command line arguments and run transcription
 def main():
