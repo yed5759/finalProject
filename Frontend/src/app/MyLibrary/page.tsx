@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { MdDelete, MdShare } from 'react-icons/md';
 
 // songs list
 const initialSongs = [
@@ -72,34 +73,34 @@ export default function MyLibrary() {
 
                                 {/* Buttons container */}
                                 <div style={{ display: 'flex', gap: '10px' }}>
-                                    {/* Delete button */}
+                                    {/* Delete icon button */}
                                     <button
                                         onClick={() => handleDelete(song.id)}
                                         style={{
-                                            padding: '5px 10px',
-                                            backgroundColor: 'red',
-                                            color: 'white',
+                                            padding: '5px',
+                                            backgroundColor: 'transparent',
                                             border: 'none',
-                                            borderRadius: '25px',
                                             cursor: 'pointer',
+                                            fontSize: '20px',
                                         }}
+                                        title="Delete"
                                     >
-                                        Delete
+                                        <MdDelete />
                                     </button>
 
-                                    {/* Share button */}
+                                    {/* Share icon button */}
                                     <button
                                         onClick={() => handleShare(song)}
                                         style={{
-                                            padding: '5px 10px',
-                                            backgroundColor: '#4CAF50',
-                                            color: 'white',
+                                            padding: '5px',
+                                            backgroundColor: 'transparent',
                                             border: 'none',
-                                            borderRadius: '25px',
                                             cursor: 'pointer',
+                                            fontSize: '20px',
                                         }}
+                                        title="Share"
                                     >
-                                        Share
+                                        <MdShare />
                                     </button>
                                 </div>
                             </div>
