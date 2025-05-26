@@ -1,7 +1,7 @@
 # transcription_system.py
 
 import torch
-from PianoTransformer import PianoTransformer
+from piano_transformer import PianoTransformer
 from features import process_audio_file
 from midi_utils import create_midi_from_predictions
 

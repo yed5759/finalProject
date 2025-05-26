@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import pretty_midi
 from pathlib import Path
-from PianoTransformer import PianoTransformer
+from piano_transformer import PianoTransformer
 from features import process_audio_file
 
 def simple_evaluate():

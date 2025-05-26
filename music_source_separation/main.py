@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import pickle
 
-from PianoTransformer import PianoTransformer
+from piano_transformer import PianoTransformer
 from features import process_audio_file
 # from midi_utils import notes_to_midi
 
