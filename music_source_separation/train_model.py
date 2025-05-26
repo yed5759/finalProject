@@ -2,7 +2,7 @@
 import torch
 from torch.utils.data import DataLoader
 from piano_transformer import PianoTransformer
-from dataset import PianoTranscriptionDataset
+from dataset_for_training import PianoTranscriptionDataset
 import argparse
 from pathlib import Path
 import pickle

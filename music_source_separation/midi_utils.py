@@ -1,6 +1,6 @@
 # midi_utils.py
 
-import pretty_midi
+from dataset_for_training import pretty_midi
 import numpy as np
 import torch
 

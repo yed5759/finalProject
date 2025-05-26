@@ -5,14 +5,14 @@ import argparse
 import torch
 import librosa
 import soundfile as sf
-import pretty_midi
+from dataset_for_training import pretty_midi
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import pickle
 
 from piano_transformer import PianoTransformer
-from features import process_audio_file
+from audio_features import process_audio_file
 # from midi_utils import notes_to_midi
 
 
