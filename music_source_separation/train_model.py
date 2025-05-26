@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import torch
 from torch.utils.data import DataLoader
-from piano_transformer import PianoTransformer, PianoTranscriptionDataset
+from transcription_system import PianoTransformer
+from dataset import PianoTranscriptionDataset
 import argparse
 from pathlib import Path
 import pickle
