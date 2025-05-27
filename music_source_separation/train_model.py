@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 import pickle
 import numpy
+import os
 
 def load_or_extract_features(audio_path, feature_path, extractor_fn, extractor_args, fallback_shape=(100, 88)):
     """
@@ -45,7 +46,11 @@ def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def get_model(args, device):
-    return PianoTransformer().to(device)
+    ptModel = PianoTransformer().to(device)
+    if args.checkpoint:
+        ptModel.load_state_dict(torch.load(args.checkpoint, map_location=device))
+        print(f"Loaded model checkpoint from {args.checkpoint}")
+    return ptModel
 
 def get_dataloader(args):
     # Use audio and MIDI directories directly
@@ -109,13 +114,17 @@ def train(args):
     for epoch in range(args.epochs):
         avg_loss = train_one_epoch(model, loader, optimizer, criterion, device)
         print(f"Epoch {epoch+1}/{args.epochs}, Loss: {avg_loss:.4f}")
+        checkpoint_path = os.path.join(args.checkpoint_dir, f"model_epoch_{epoch+1}.pt")
+        torch.save(model.state_dict(), checkpoint_path)
     torch.save(model.state_dict(), args.model_path)
     print(f"Final model saved to {args.model_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir', type=str, default='data')
-    parser.add_argument('--model-path', type=str, default='model.pt')
+    parser.add_argument('--model-path', type=str, default='models\piano_transformer\model.pt')
+    parser.add_argument('--checkpoint_dir', type=str, default='models\checkpoints')
+    parser.add_argument('--checkpoint', type=str, default='')
     parser.add_argument('--batch-size', type=int, default=16)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--lr', type=float, default=0.001)
