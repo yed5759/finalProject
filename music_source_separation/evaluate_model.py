@@ -2,9 +2,10 @@
 
 import torch
 import numpy as np
-import pretty_midi
+from dataset_for_training import pretty_midi
 from pathlib import Path
-from piano_transformer import PianoTransformer, process_audio_file
+from piano_transformer import PianoTransformer
+from audio_features import process_audio_file
 
 def simple_evaluate():
     """

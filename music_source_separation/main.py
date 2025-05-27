@@ -5,13 +5,17 @@ import argparse
 import torch
 import librosa
 import soundfile as sf
-import pretty_midi
+from dataset_for_training import pretty_midi
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import pickle
 
-from piano_transformer import PianoTransformer, process_audio_file, notes_to_midi
+from piano_transformer import PianoTransformer
+from audio_features import process_audio_file
+# from midi_utils import notes_to_midi
+
+
 
 # Parse command line arguments and run transcription
 def main():
