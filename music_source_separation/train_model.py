@@ -6,7 +6,7 @@ from dataset_for_training import PianoTranscriptionDataset
 import argparse
 from pathlib import Path
 import pickle
-import numpy
+import numpy as np
 import os
 
 def load_or_extract_features(audio_path, feature_path, extractor_fn, extractor_args, fallback_shape=(100, 88)):
