@@ -6,5 +6,6 @@ Each user is stored as a document in the `users` collection.
 {
   "_id": "cognito-sub",
   "username": "username from Cognito",
-  "songs": [ ... ]
+  "songs": [ ... ],
+  "shared_songs": [ ... ]
 }

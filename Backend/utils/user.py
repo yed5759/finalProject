@@ -23,7 +23,7 @@ def get_user_by_token(id_token):
         if not sub:
             raise ValueError("Token missing sub")
 
-        user = db.users.find_one({"_id": sub}, {"_id": 0})  # hide internal MongoDB _id
+        user = db.users.find_one({"_id": sub}) 
         if not user:
             raise ValueError("User not found")
 

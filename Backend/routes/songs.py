@@ -15,6 +15,9 @@ songs_routes = Blueprint("songs", __name__)
 # Middleware-like helper to extract user from token
 def get_user_from_request():
     auth_header = request.headers.get("Authorization")
+    # todo delete
+    print("Authorization header in /songs:", auth_header) 
+    
     if not auth_header or not auth_header.startswith("Bearer "):
         return None, "Unauthorized"
     token = auth_header.split(" ")[1]
@@ -22,6 +25,8 @@ def get_user_from_request():
         user = get_user_by_token(token)
         return user, None
     except Exception as e:
+        # todo delete
+        print("Token validation error in /songs:", e)
         return None, str(e)
 
 # GET /songs
@@ -73,6 +78,7 @@ def delete_song(song_id):
 # todo delete - POST /songs/add-const
 @songs_routes.route("/songs/add-const", methods=["POST"])
 def add_const():
+    print("add_const called!")
     user, error = get_user_from_request()
     if error:
         return jsonify({"error": error}), 401

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { MdDelete, MdShare } from 'react-icons/md';
 
+// todo delete
 // songs list
 const initialSongs = [
     { id: '1', title: 'איש עם חץ', artist: 'Hillel', notes: ['Note 1', 'Note 2'], tags: ['pop', '2023'] },
@@ -48,7 +49,7 @@ export default function MyLibrary() {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${localStorage.getItem("token")}`, // adjust this if your token is stored elsewhere
+                    Authorization: `Bearer ${localStorage.getItem("id_token")}`, // adjust this if your token is stored elsewhere
                 },
             });
 
@@ -56,6 +57,10 @@ export default function MyLibrary() {
 
             const data = await res.json();
             setSongs(prevSongs => [...prevSongs, data.song]);
+
+            // todo delete
+            // ✅ הצגת הודעת הצלחה
+            alert("✔️ Added const song successfully!");
         } catch (error) {
             if (error instanceof Error) {
                 alert("Error adding test song: " + error.message);
