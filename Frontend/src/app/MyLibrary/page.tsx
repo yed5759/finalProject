@@ -41,12 +41,31 @@ export default function MyLibrary() {
         (song.tags && song.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))) // if search query matches any tag
     );
 
-    // Handle deleting a song
-    const handleDelete = (id: string) => {
-        // Remove song with the given id
-        const updatedSongs = songs.filter(song => song.id !== id);
-        setSongs(updatedSongs);
+    // const handleDelete = (id: string) => {
+    //     const updatedSongs = songs.filter(song => song.id !== id);
+    //     setSongs(updatedSongs);
+    // };
+
+    // Handle deleting a song widh given id
+    const handleDelete = async (id: string) => {
+        try {
+            const res = await fetch(`http://localhost:5000/songs/${id}`, {
+                method: "DELETE",
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem("id_token")}`,
+                },
+            });
+
+            if (!res.ok) throw new Error("Failed to delete song");
+
+            // Delete from client side
+            setSongs(prevSongs => prevSongs.filter(song => song.id !== id));
+        } catch (error) {
+            console.error("Error deleting song:", error);
+            alert("שגיאה במחיקת שיר");
+        }
     };
+
 
     // Handle sharing a song (this is just a placeholder)
     const handleShare = (song: Song) => {
@@ -54,7 +73,7 @@ export default function MyLibrary() {
         alert(`Sharing song: ${song.title}`);
     };
 
-    //todo delete this place after testing
+    //todo delete this function after testing
     const handleAddConstSong = async () => {
         try {
             const res = await fetch("http://localhost:5000/songs/add-const", {
@@ -69,10 +88,6 @@ export default function MyLibrary() {
 
             const data = await res.json();
             setSongs(prevSongs => [...prevSongs, data.song]);
-
-            // todo delete
-            // ✅ הצגת הודעת הצלחה
-            alert("✔️ Added const song successfully!");
         } catch (error) {
             if (error instanceof Error) {
                 alert("Error adding test song: " + error.message);
