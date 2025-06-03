@@ -1,7 +1,7 @@
 'use client';
 
 
-import '../styles/Navbar.css';
+import '../styles/navbar.css';
 import { logout } from '@/utils/cognito';
 import { useAuth } from '@/context/AuthContext';
 

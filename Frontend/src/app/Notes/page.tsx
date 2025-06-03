@@ -1,7 +1,9 @@
+// src/app/Notes/page.tsx
+
 'use client';
 
 import { Renderer, Stave, StaveNote, Voice, Formatter } from 'vexflow';
-import '../../styles/Notes.css'
+import '../../styles/notes.css'
 import CustomModal from '../../components/modal'
 
 export default function Notes() {

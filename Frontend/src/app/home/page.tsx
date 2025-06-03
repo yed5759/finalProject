@@ -1,4 +1,4 @@
-// src/app/home/page.tsx
+// src/app/Home/page.tsx
 
 'use client';
 
@@ -29,7 +29,7 @@ export default function HomePage() {
     const formData = new FormData();
     formData.append("instrument", instrument);
 
-    let api = "/home";
+    let api = "/Home";
 
     if (file) {
       formData.append("file", file);

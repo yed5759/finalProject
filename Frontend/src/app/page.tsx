@@ -24,9 +24,9 @@ const Page = () => {
   useEffect(() => {
     if (!loading && authChecked) {
       if (isAuthenticated) {
-        router.replace('/home');
+        router.replace('/Home');
       } else {
-        router.replace('/landing');
+        router.replace('/Landing');
       }
     }
   }, [isAuthenticated, loading, authChecked, router]);
