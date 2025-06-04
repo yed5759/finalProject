@@ -16,8 +16,6 @@ db = client["taking_notes"]
 def get_user_by_token(id_token):
     try:
         decoded = jwt.decode(id_token, options={"verify_signature": False, "verify_aud": False})
-        # todo delete
-        print("Decoded JWT:", decoded)  # <--- הוספת פלט לדיבוג
         
         sub = decoded.get("sub")
         if not sub:
