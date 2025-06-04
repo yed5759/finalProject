@@ -13,11 +13,13 @@ type Song = {
     tags?: string[];
 };
 
-export default function MyLibrary() {
-    // songs list
-    const [songs, setSongs] = useState<Song[]>([]); // Songs list state
+const bc = new BroadcastChannel("songs");
 
-    const [searchQuery, setSearchQuery] = useState(''); // State for search query
+export default function MyLibrary() {
+    // Songs list state
+    const [songs, setSongs] = useState<Song[]>([]);
+    // State for search query
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Filter songs based on search query
     const filteredSongs = songs.filter((song) =>
@@ -46,61 +48,72 @@ export default function MyLibrary() {
         }
     };
 
-
     // Handle sharing a song (this is just a placeholder)
     const handleShare = (song: Song) => {
         // For now, just alert the song title and artist
         alert(`Sharing song: ${song.title}`);
     };
 
-    //todo delete this function after testing
-    const handleAddConstSong = async () => {
+    // ✅ הפונקציה לשליפת שירים (חשוב שתהיה נפרדת כדי שנוכל לקרוא לה מאירועים)
+    const fetchSongs = async () => {
         try {
-            const res = await fetch("http://localhost:5000/songs/add-const", {
-                method: "POST",
+            const res = await fetch("http://localhost:5000/songs", {
                 headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${localStorage.getItem("id_token")}`, // adjust this if your token is stored elsewhere
+                    Authorization: `Bearer ${localStorage.getItem("id_token")}`,
                 },
             });
 
-            if (!res.ok) throw new Error("Failed to add test song");
+            if (!res.ok) throw new Error("Failed to fetch songs");
 
             const data = await res.json();
-            setSongs(prevSongs => [...prevSongs, data.song]);
+            setSongs(data);
         } catch (error) {
-            if (error instanceof Error) {
-                alert("Error adding test song: " + error.message);
-            } else {
-                alert("An unknown error occurred.");
-            }
+            console.error("Error fetching songs:", error);
+            alert("שגיאה בטעינת רשימת השירים");
         }
-
     };
+
+    // //todo delete this function after testing
+    // const handleAddConstSong = async () => {
+    //     try {
+    //         const res = await fetch("http://localhost:5000/songs/add-const", {
+    //             method: "POST",
+    //             headers: {
+    //                 "Content-Type": "application/json",
+    //                 Authorization: `Bearer ${localStorage.getItem("id_token")}`, // adjust this if your token is stored elsewhere
+    //             },
+    //         });
+
+    //         if (!res.ok) throw new Error("Failed to add test song");
+
+    //         const data = await res.json();
+    //         setSongs(prevSongs => [...prevSongs, data.song]);
+    //     } catch (error) {
+    //         if (error instanceof Error) {
+    //             alert("Error adding test song: " + error.message);
+    //         } else {
+    //             alert("An unknown error occurred.");
+    //         }
+    //     }
+
+    // };
 
 
     useEffect(() => {
-        const fetchSongs = async () => {
-            try {
-                const res = await fetch("http://localhost:5000/songs", {
-                    headers: {
-                        Authorization: `Bearer ${localStorage.getItem("id_token")}`,
-                    },
-                });
+        // Get list of songs
+        fetchSongs();
 
-                if (!res.ok) throw new Error("Failed to fetch songs");
-
-                const data = await res.json();
-                setSongs(data); // השרת מחזיר את רשימת השירים כ-array ישיר
-            } catch (error) {
-                console.error("Error fetching songs:", error);
-                alert("שגיאה בטעינת רשימת השירים");
+        // Listener to song-added event
+        bc.onmessage = (event) => {
+            if (event.data?.type === "song-added") {
+                fetchSongs(); // Refresh list of songs
             }
         };
 
-        fetchSongs();
+        return () => {
+            bc.close(); // מנקה את הערוץ כשהקומפוננטה נסגרת
+        };
     }, []);
-
 
     return (
         <>
@@ -123,7 +136,7 @@ export default function MyLibrary() {
                 />
             </div>
 
-            {/* Add Const Song Button - מתחת לסרגל החיפוש */}
+            {/* Add Const Song Button - מתחת לסרגל החיפוש
             <div style={{ margin: '0 70px 20px 70px' }}>
                 <button
                     onClick={handleAddConstSong}
@@ -139,7 +152,7 @@ export default function MyLibrary() {
                 >
                     Add Const Song
                 </button>
-            </div>
+            </div> */}
 
             <div style={{ maxHeight: '500px', overflowY: 'scroll', border: '1px solid #ccc', padding: '10px', margin: '30px 70px' }}>
                 <ul style={{ listStyleType: 'none', padding: 0 }}>
