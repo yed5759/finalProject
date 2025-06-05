@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
-const Page = () => {
+export default function Page () {
   const { isAuthenticated, loading, checkAuth } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -36,6 +36,5 @@ const Page = () => {
   }
 
   return null;
-};
+}
 
-export default Page;

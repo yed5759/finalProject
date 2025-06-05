@@ -20,14 +20,11 @@ export default function HomePage() {
 
     const fileInput = document.getElementById('upload') as HTMLInputElement | null;
     const urlInput = document.getElementById('url') as HTMLInputElement | null;
-    const instrumentSelect = document.getElementById('instrument') as HTMLInputElement | null;
 
     const file = fileInput?.files?.[0];
     const url = urlInput?.value.trim();
-    const instrument = instrumentSelect?.value || "piano";
 
     const formData = new FormData();
-    formData.append("instrument", instrument);
 
     let api = "http://localhost:5000/home";
 
@@ -86,12 +83,6 @@ export default function HomePage() {
           <button className="" onClick={SmartSubmit}>
             Generate Notes
           </button>
-          <select className="" id="instrument" name="format" style={{ width: '50px', borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }} ref={instrumentRef}>
-            <option value="piano">🎹</option>
-            <option value="guitar">🎸</option>
-            <option value="violin">🎻</option>
-            <option value="flute">🪈</option>
-          </select>
         </div>
       </div>
     </div>

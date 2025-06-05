@@ -2,9 +2,10 @@
 
 import "../styles/globals.css";
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { AppWrapper } from "./AppWrapper";
+import { AppWrapper } from "@/components/AppWrapper";
 import { AuthProvider } from "@/context/AuthContext";
 import Image from "next/image";
+import React from "react";
 
 export const metadata = {
   title: 'Taking Notes',

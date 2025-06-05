@@ -19,7 +19,7 @@ export const AppWrapper = ({ children }: PropsWithChildren) => {
         // Redirect based on auth status
         if (isAuthenticated && pathname === "/landing") {
             router.replace("/home");
-        } else if (!isAuthenticated && pathname.startsWith("/home")) {
+        } else if (!isAuthenticated && !pathname.startsWith("/landing")) {
             router.replace("/landing");
         }
     }, [pathname, isAuthenticated, checkAuth, router]);
@@ -27,7 +27,7 @@ export const AppWrapper = ({ children }: PropsWithChildren) => {
     // Don't render anything until we know if the user is authenticated
     if (isAuthenticated === null) return null;
 
-    const showNavbarPages = ['/home', '/myLibrary', '/notes'];
+    const showNavbarPages = ['/home', '/MyLibrary', '/Notes'];
     const showNavbar = isAuthenticated && showNavbarPages.includes(pathname);
 
     return (
