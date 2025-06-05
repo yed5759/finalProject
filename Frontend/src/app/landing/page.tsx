@@ -1,4 +1,4 @@
-// src/app/Landing/page.tsx
+// src/app/landing/page.tsx
 
 'use client';
 
