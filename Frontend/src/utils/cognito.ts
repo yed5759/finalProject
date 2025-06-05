@@ -61,5 +61,5 @@ export const logout = (): void => {
   dispatchTokenChange();
 
   // Redirect to landing page
-  window.location.href = "/Landing";
+  window.location.href = "/landing";
 };

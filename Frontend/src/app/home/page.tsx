@@ -29,7 +29,7 @@ export default function HomePage() {
     const formData = new FormData();
     formData.append("instrument", instrument);
 
-    let api = "/Home";
+    let api = "/home";
 
     if (file) {
       formData.append("file", file);
