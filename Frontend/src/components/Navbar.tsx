@@ -15,7 +15,7 @@ export default function Navbar() {
   };
 
   return (
-    <header className="w-full bg-blue-900 text-white flex justify-between items-center">
+    <header className="w-full bg-blue-900 text-white flex justify-between items-center sticky-top">
       <nav className="navbar">
         <div className="navbar-title">🎵 Taking Notes</div>
         <button onClick={handleLogout} className="navbar-button">Logout</button>
