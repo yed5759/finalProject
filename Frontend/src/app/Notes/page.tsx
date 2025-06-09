@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { Renderer, Stave, StaveNote, Voice, Formatter } from 'vexflow';
-import '../../styles/notes.css'
+import '../../styles/Notes.css'
 import CustomModal from '../../components/modal'
 
 const bc = new BroadcastChannel("songs"); // ערוץ תקשורת בין טאבים
