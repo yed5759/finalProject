@@ -5,45 +5,15 @@
 import {Renderer, Stave, StaveNote, Voice, Formatter} from 'vexflow';
 import '../../styles/Notes.css'
 import CustomModal from '../../components/modal'
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useRef} from "react";
 
 type NotesProps = {
     songName?: string;
     notes?: string[];
 };
-const bc = new BroadcastChannel("songs");
 
 export default function Notes({songName, notes}: NotesProps) {
     const vfRef = useRef<HTMLDivElement>(null);
-    const [loading, setLoading] = useState(false);
-
-    const handleAddConstSong = async () => {
-        setLoading(true);
-        try {
-            const res = await fetch("http://localhost:5000/songs/add-const", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${localStorage.getItem("id_token")}`,
-                },
-            });
-
-            if (!res.ok) throw new Error("Failed to add test song");
-
-            // ✅ שליחת הודעה לערוץ התקשורת
-            bc.postMessage({ type: "song-added" });
-
-            alert("🎵 שיר נוסף בהצלחה!");
-        } catch (error) {
-            alert("שגיאה בהוספת שיר: " + (error instanceof Error ? error.message : ''));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Helper to format Librosa-style notes to VexFlow keys
-    const formatNote = (note: string): string =>
-        note.toLowerCase().replace('♯', '#').replace(/^([a-g])([#b]?)(\d)$/i, '$1$2/$3');
 
     useEffect(() => {
         if (!vfRef.current) return;
@@ -70,15 +40,15 @@ export default function Notes({songName, notes}: NotesProps) {
 
         const renderer = new Renderer(vfRef.current, Renderer.Backends.SVG);
         const STAVE_HEIGHT = 100;
-        const TOP_MARGIN = 20;
-        const BOTTOM_BUFFER = 20;
+        const TOP_MARGIN = 10;
+        const BOTTOM_BUFFER = 10;
 
         const height = groups.length * STAVE_HEIGHT + TOP_MARGIN + BOTTOM_BUFFER;
-        renderer.resize(1400, height);
+        renderer.resize(1400, height + 10);
 
         const ctx = renderer.getContext();
 
-        let y = 20; // vertical position for each stave
+        let y = 10; // vertical position for each stave
         groups.forEach(group => {
             const stave = new Stave(10, y, 1400);
             stave.addClef('treble').addTimeSignature('4/4').setContext(ctx).draw();
@@ -101,6 +71,7 @@ export default function Notes({songName, notes}: NotesProps) {
         );
     }
 
+    // @ts-ignore
     return (
         <div className="container d-flex flex-column justify-content-start align-items-center text-center"
              style={{ height: '100vh', overflow: 'hidden' }}>
@@ -116,15 +87,6 @@ export default function Notes({songName, notes}: NotesProps) {
                 </button>
                 <button className="btn" style={{width: '10pc', background: "#5ac9d6"}}>Edit Notes</button>
                 <button className="btn" style={{width: '10pc', background: "#59cf59"}}>Download</button>
-                {/* כפתור חדש להוספת שיר */}
-                <button
-                    className="btn"
-                    style={{ width: '10pc', background: "#28a745", color: 'white' }}
-                    onClick={handleAddConstSong}
-                    disabled={loading}
-                >
-                    {loading ? "Adding..." : "Add Const Song"}
-                </button>
             </div>
             <div
                 className="w-100 mt-4"
@@ -137,7 +99,7 @@ export default function Notes({songName, notes}: NotesProps) {
                     msOverflowStyle: 'none'}}>
                 <div ref={vfRef} style={{ width: '100%' }} />
             </div>
-            <CustomModal/>
+            <CustomModal notes={notes}/>
         </div>
     );
 }

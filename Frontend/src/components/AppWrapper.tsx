@@ -2,27 +2,30 @@
 
 'use client';
 
-import type { PropsWithChildren } from "react";
+import {PropsWithChildren} from "react";
 import { useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 export const AppWrapper = ({ children }: PropsWithChildren) => {
-    const { isAuthenticated, checkAuth } = useAuth();
+    const { isAuthenticated, checkAuth, loading} = useAuth();
     const pathname = usePathname();
     const router = useRouter();
 
     useEffect(() => {
         checkAuth();
+    }, [checkAuth]);
 
+    useEffect(() => {
+        if(loading) return;
         // Redirect based on auth status
         if (isAuthenticated && pathname === "/landing") {
             router.replace("/home");
         } else if (!isAuthenticated && !pathname.startsWith("/landing")) {
             router.replace("/landing");
         }
-    }, [pathname, isAuthenticated, checkAuth, router]);
+    }, [pathname, isAuthenticated, loading, router]);
 
     // Don't render anything until we know if the user is authenticated
     if (isAuthenticated === null) return null;
