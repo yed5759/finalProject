@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import torch
+from natsort import natsorted
 from torch.utils.data import DataLoader
 from piano_transformer import PianoTransformer
 from dataset_for_training import PianoTranscriptionDataset
@@ -8,6 +9,7 @@ from pathlib import Path
 import pickle
 import numpy as np
 import os
+import re
 
 def load_or_extract_features(audio_path, feature_path, extractor_fn, extractor_args, fallback_shape=(100, 88)):
     """
@@ -111,11 +113,12 @@ def train(args):
     criterion = torch.nn.BCEWithLogitsLoss()
 
     print(f"Starting training for {args.epochs} epochs...")
-
+    files = natsorted([f.name for f in args.checkpoint_dir.iterdir() if f.is_file()])
+    i = int(re.findall(r'\d+', files[-1])[0]) + 1 if files else 1
     for epoch in range(args.epochs):
         avg_loss = train_one_epoch(model, loader, optimizer, criterion, device)
         print(f"Epoch {epoch+1}/{args.epochs}, Loss: {avg_loss:.4f}")
-        checkpoint_path = os.path.join(args.checkpoint_dir, f"model_epoch_{epoch+1}.pt")
+        checkpoint_path = os.path.join(args.checkpoint_dir, f"model_epoch_{epoch+i}.pt")
         torch.save(model.state_dict(), checkpoint_path)
     torch.save(model.state_dict(), args.model_path)
     print(f"Final model saved to {args.model_path}")
