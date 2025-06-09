@@ -68,6 +68,7 @@ export default function CustomModal(notes: string[]) {
 
     return (
         <div className="modal fade"
+             style={{marginTop: "200px"}}
             id="staticBackdrop"
             data-bs-backdrop="static"
             data-bs-keyboard="false"
@@ -83,9 +84,15 @@ export default function CustomModal(notes: string[]) {
                     </div>
                     <div className="modal-body">
                         <label htmlFor="songName" className="form-label text-start w-100">Enter song name:</label>
-                        <input className="form-control form-control-sm" id="songName" type="text" placeholder="there is no song in ba-sing-se"
+                        <input className="form-control form-control-sm" id="songName" type="text"
+                               placeholder="there is no song in ba-sing-se"
+                               aria-label=".form-control-sm example" required/>
+                        <label htmlFor="artist" className="form-label text-start w-100 mt-1">Artist name:</label>
+                        <input className="form-control form-control-sm" id="artist" type="text"
+                               placeholder="mr piano..."
                                aria-label=".form-control-sm example" required/>
                     </div>
+
                     <div className="modal-footer">
                         <button type="button" className="btn btn-danger" data-bs-dismiss="modal">cancel</button>
                         <button type="submit" className="btn btn-secondary">save</button>
