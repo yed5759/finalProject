@@ -2,7 +2,7 @@
 
 import torch
 import numpy as np
-from dataset_for_training import pretty_midi
+import pretty_midi
 from pathlib import Path
 from piano_transformer import PianoTransformer
 from audio_features import process_audio_file
