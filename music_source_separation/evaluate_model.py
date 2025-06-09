@@ -19,7 +19,8 @@ def simple_evaluate():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # Find your model file
-    model_files = list(Path('models/piano_transformer').glob('*.pt'))
+    # model_files = list(Path('models/piano_transformer').glob('*.pt'))
+    model_files = list(Path('models/checkpoints').glob('model_epoch_20.pt'))
     if not model_files:
         model_files = list(Path('.').glob('*.pt'))
     

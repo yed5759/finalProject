@@ -3,7 +3,7 @@
 import torch
 from torch.utils.data import Dataset
 import numpy as np
-from dataset_for_training import pretty_midi
+import pretty_midi
 from pathlib import Path
 from audio_features import load_or_extract_features, process_audio_file
 
