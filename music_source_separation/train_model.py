@@ -113,8 +113,11 @@ def train(args):
     criterion = torch.nn.BCEWithLogitsLoss()
 
     print(f"Starting training for {args.epochs} epochs...")
-    files = natsorted([f.name for f in args.checkpoint_dir.iterdir() if f.is_file()])
-    i = int(re.findall(r'\d+', files[-1])[0]) + 1 if files else 1
+    if args.checkpoint == '':
+        files = natsorted([f.name for f in args.checkpoint_dir.iterdir() if f.is_file()])
+        i = int(re.findall(r'\d+', files[-1])[0]) + 1 if files else 1
+    else:
+        i = int(re.findall(r'\d+', args.checkpoint)[0]) + 1
     for epoch in range(args.epochs):
         avg_loss = train_one_epoch(model, loader, optimizer, criterion, device)
         print(f"Epoch {epoch+1}/{args.epochs}, Loss: {avg_loss:.4f}")
