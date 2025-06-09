@@ -1,0 +1,8 @@
+pymongo
+requests
+pyjwt
+python-dotenv~=1.1.0
+yt-dlp~=2025.3.27
+boto3~=1.37.23
+flask
+flask-cors~=4.0.0

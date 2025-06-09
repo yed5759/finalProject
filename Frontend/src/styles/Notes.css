@@ -1,0 +1,19 @@
+/* Notes.css */
+
+@import url('https://fonts.googleapis.com/css2?family=Playwrite+AU+SA:wght@100..400&display=swap');
+
+h1 {
+    font-size: 5em;
+    font-family: 'Playwrite AU SA', serif;
+}
+
+.title {
+    font-size: 4rem;
+    font-weight: bold;
+}
+
+.underline {
+    width: 65%;
+    border-bottom: 3px solid darkred;
+    opacity: 50%;
+}
