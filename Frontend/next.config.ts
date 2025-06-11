@@ -1,3 +1,5 @@
+//next.config.ts
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     output: 'export', // 🔥 this enables static export in App Router

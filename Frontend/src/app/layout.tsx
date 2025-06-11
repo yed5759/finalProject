@@ -15,7 +15,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <div style={{
+        <div className="left-decoration" />
+        <div className="right-decoration" />
+
+        {/* <div style={{
           position: "fixed",
           top: 0,
           bottom: 0,
@@ -29,10 +32,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             alt="left decoration"
             fill
             style={{ objectFit: 'cover', objectPosition: 'top left' }}
-            priority
           />
-        </div>
-        <div style={{
+        </div> */}
+        {/* <div style={{
           position: "fixed",
           top: 0,
           bottom: 0,
@@ -47,7 +49,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             fill
             style={{ objectFit: 'cover', objectPosition: 'top right' }}
           />
-        </div>
+        </div> */}
         <AuthProvider>
           <AppWrapper>
             {children}

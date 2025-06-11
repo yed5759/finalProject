@@ -28,3 +28,31 @@ body {
   align-items: center;
   color: black;
 }
+
+.left-decoration {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 60px;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url('/left.png');
+  background-size: cover;
+  background-position: top left;
+  background-repeat: no-repeat;
+}
+
+.right-decoration {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 60px;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url('/right.png');
+  background-size: cover;
+  background-position: top right;
+  background-repeat: no-repeat;
+}
