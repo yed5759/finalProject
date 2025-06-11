@@ -1,11 +1,12 @@
 # utils/sharing.py
 
-from utils.auth import db
+from utils.db import get_db
 from uuid import uuid4
 from utils.songs import add_song_to_user
 
 # Share a song to another user (adds to their 'shared_songs')
 def share_song_to_user(sender_id, recipient_username, song_data):
+    db = get_db()
     recipient = db.users.find_one({"username": recipient_username})
     if not recipient:
         raise ValueError("Recipient user not found")
@@ -27,6 +28,7 @@ def share_song_to_user(sender_id, recipient_username, song_data):
 
 # Get all shared songs for a user
 def get_shared_songs_for_user(user_id):
+    db = get_db()
     user = db.users.find_one({"_id": user_id}, {"shared_songs": 1})
     if not user:
         raise ValueError("User not found")
@@ -34,6 +36,7 @@ def get_shared_songs_for_user(user_id):
 
 # Accept a shared song and move it to user's own songs
 def accept_shared_song(user_id, shared_song_id):
+    db = get_db()
     user = db.users.find_one({"_id": user_id})
     if not user:
         raise ValueError("User not found")

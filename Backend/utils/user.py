@@ -3,18 +3,17 @@
 import os
 import jwt
 from dotenv import load_dotenv
-from pymongo import MongoClient
+from utils.db import get_db
 
 # Load environment variables from .env file
 load_dotenv()
 
 # MongoDB connection
-client = MongoClient(os.getenv("MONGO_URI"))
-db = client["taking_notes"]
  
 # Get user from database by id_token
 def get_user_by_token(id_token):
     try:
+        db = get_db()
         decoded = jwt.decode(id_token, options={"verify_signature": False, "verify_aud": False})
         
         sub = decoded.get("sub")

@@ -1,11 +1,12 @@
 # utils/songs.py
 
 from pymongo import ReturnDocument
-from utils.auth import db
+from utils.db import get_db
 from uuid import uuid4
 
 # Get songs list for a user by their sub (user id)
 def get_songs_for_user(user_id):
+    db = get_db()
     user = db.users.find_one({"_id": user_id}, {"songs": 1})
     if not user:
         raise ValueError("User not found")
@@ -13,6 +14,7 @@ def get_songs_for_user(user_id):
 
 # Add a new song to user's songs list
 def add_song_to_user(user_id, song_data):
+    db = get_db()
     # Ensure required fields
     if "info" not in song_data:
         raise ValueError("information is required")
@@ -33,6 +35,7 @@ def add_song_to_user(user_id, song_data):
 
 # Delete a song by its UUID from user's songs
 def delete_song_from_user(user_id, song_id):
+    db = get_db()
     result = db.users.update_one(
         {"_id": user_id},
         {"$pull": {"songs": {"id": song_id}}}
@@ -42,6 +45,7 @@ def delete_song_from_user(user_id, song_id):
 
 # Update a song by its UUID within user's songs
 def update_song_for_user(user_id, song_id, updated_data):
+    db = get_db()
     update_query = {f"songs.$.{key}": value for key, value in updated_data.items()}
     result = db.users.update_one(
         {"_id": user_id, "songs.id": song_id},
@@ -52,6 +56,7 @@ def update_song_for_user(user_id, song_id, updated_data):
 
 # Get a specific song by its UUID from user's songs
 def get_song_by_id(user_id, song_id):
+    db = get_db()
     user = db.users.find_one({"_id": user_id}, {"songs": 1})
     if not user:
         raise ValueError("User not found")

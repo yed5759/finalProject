@@ -4,14 +4,13 @@ import os
 import requests
 import jwt
 from dotenv import load_dotenv
-from pymongo import MongoClient
+from utils.db import get_db
 
 # Load environment variables from .env file
 load_dotenv()
 
 # MongoDB connection
-client = MongoClient(os.getenv("MONGO_URI"))
-db = client["taking_notes"]
+db = get_db()
 
 # Exchange code for tokens
 def exchange_code_for_tokens(code):
