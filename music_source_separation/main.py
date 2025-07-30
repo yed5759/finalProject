@@ -197,7 +197,7 @@ def generate_output(model, audio_features, device, args, output_dir, audio_path,
 
     piano_roll_path = save_piano_roll_figure(output_dir, audio_path, frame_probs, args.save_piano_roll)      
     
-    midi_path, notes, duration = save_midi_and_get_stats(
+    notes, duration = save_midi_and_get_stats(
         output_dir,
         audio_path,
         frame_binary,
@@ -206,7 +206,7 @@ def generate_output(model, audio_features, device, args, output_dir, audio_path,
     )
 
     return {
-        'midi_path': midi_path,
+        'note_tuples_path': output_dir / f"{audio_path.stem}_notes.json",
         'piano_roll_path': piano_roll_path,
         'notes': notes,
         'duration': duration
@@ -263,6 +263,12 @@ def save_midi_and_get_stats(output_dir, audio_path, frame_binary, hop_length, sa
         json.dump(note_tuples, f, indent=2)
 
     print(f"Exported {len(note_tuples)} notes to {json_path}")
+    if note_tuples:
+        duration = max(note["startTime"] + note["duration"] for note in note_tuples)
+    else:
+        duration = 0.0
+
+    return note_tuples, duration
 
 if __name__ == "__main__":
     main() 
