@@ -12,6 +12,6 @@ venv
 __pycache__
 output
 debug_training.py
-run_transcription.py
-transcribe_utils.py
+#maybe-one-day-run_transcription.py
+#also-transcribe_utils.py
 utils
