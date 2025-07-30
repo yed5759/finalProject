@@ -2,6 +2,7 @@
 
 'use client';
 
+// @ts-ignore
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { isAuthenticated, exchangeCodeForToken } from '@/utils/cognito';
@@ -44,9 +45,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     useEffect(() => {
         const code = searchParams.get('code');
-        if (!code) {
-            checkAuth(); // Only check without code if no code in URL
-        }
+        checkAuth(code || undefined)
     }, [searchParams]);
 
     return (
