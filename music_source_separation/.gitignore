@@ -2,10 +2,16 @@
 dataset
 data
 models
+cropped_samples
+crop_maestro_pair.py
+train_overfit_one.py
+debug_outputs
 
 # Miscellanious
 venv
 __pycache__
 output
 debug_training.py
+run_transcription.py
+transcribe_utils.py
 utils

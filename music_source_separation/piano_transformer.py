@@ -52,8 +52,8 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class PianoTransformer(nn.Module):
-    def __init__(self, n_cqt_bins=88, hidden_dim=256, num_heads=4, num_layers=3, 
-                 dropout=0.1, max_len=1000):
+    def __init__(self, n_cqt_bins=88, hidden_dim=512, num_heads=8, num_layers=6, 
+                 dropout=0.1, max_len=20000):
         super(PianoTransformer, self).__init__()
         
         input_dim = n_cqt_bins # CQT bins

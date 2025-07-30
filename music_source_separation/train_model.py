@@ -109,12 +109,21 @@ def train(args):
     model = get_model(args, device)
     print(f"Model created with {sum(p.numel() for p in model.parameters())} parameters")
     loader = get_dataloader(args)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    criterion = torch.nn.BCEWithLogitsLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4) # <-maybe-> lr = args.lr
+
+    # --- Estimate pos_weight ---
+    features, targets = next(iter(loader))
+    num_pos = targets.sum()
+    num_neg = targets.numel() - num_pos
+    pos_weight = num_neg / (num_pos + 1e-8) * 1.5
+    print(f"Estimated pos_weight: {pos_weight:.2f}")
+
+    criterion = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight, device=device))
 
     print(f"Starting training for {args.epochs} epochs...")
     if args.checkpoint == '':
-        files = natsorted([f.name for f in args.checkpoint_dir.iterdir() if f.is_file()])
+        checkpoint_dir = Path(args.checkpoint_dir)
+        files = natsorted([f.name for f in checkpoint_dir.iterdir() if f.is_file()])
         i = int(re.findall(r'\d+', files[-1])[0]) + 1 if files else 1
     else:
         i = int(re.findall(r'\d+', args.checkpoint)[0]) + 1

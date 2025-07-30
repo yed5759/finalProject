@@ -9,11 +9,13 @@ from dataset_for_training import pretty_midi
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+from midi_utils import piano_roll_to_note_tuples
 import pickle
 
 from piano_transformer import PianoTransformer
 from audio_features import process_audio_file
-# from midi_utils import notes_to_midi
+from pathlib import Path
+import json
 
 
 
@@ -48,7 +50,7 @@ def main():
                         help='Dropout rate')
     
     # Inference parameters
-    parser.add_argument('--threshold', type=float, default=0.5, help='Threshold for binarizing model output')
+    parser.add_argument('--threshold', type=float, default=0.925, help='Threshold for binarizing model output')
     parser.add_argument('--save-piano-roll', action='store_true',
                         help='Save piano roll visualization')
     parser.add_argument('--cpu', action='store_true',
@@ -125,6 +127,8 @@ def create_model(model_path, device, args):
         num_heads=num_heads,
         dropout=dropout
     ).to(device)
+
+    print(model)
     
     # Load model weights
     if checkpoint is not None and 'model_state_dict' in checkpoint:
@@ -188,6 +192,9 @@ def generate_output(model, audio_features, device, args, output_dir, audio_path,
     
     frame_probs, frame_binary = process_predictions(frame_probs, args.threshold)
 
+    max_notes = np.max(np.sum(frame_binary, axis=1))
+    print(f"Max notes in a single frame: {max_notes}")
+
     piano_roll_path = save_piano_roll_figure(output_dir, audio_path, frame_probs, args.save_piano_roll)      
     
     midi_path, notes, duration = save_midi_and_get_stats(
@@ -244,25 +251,18 @@ def save_piano_roll_figure(output_dir, audio_path, frame_probs, save_flag):
     print(f"Saved piano roll visualization to {piano_roll_path}")
     return piano_roll_path
 
-# Convert predictions to MIDI, save file, and compute stats
+# Convert predictions to tupples in json
 def save_midi_and_get_stats(output_dir, audio_path, frame_binary, hop_length, sample_rate):
-    # Convert predictions to MIDI
-    midi_obj = notes_to_midi(
-        frame_binary,
-        hop_length=hop_length,
-        sample_rate=sample_rate
+    # Convert predictions to tupples
+    note_tuples = piano_roll_to_note_tuples(
+        frame_binary, hop_length=hop_length, sample_rate=sample_rate
     )
-    # Save MIDI
-    midi_path = output_dir / f"{audio_path.stem}_transcribed.mid"
-    midi_obj.write(str(midi_path))
-    print(f"Saved transcribed MIDI to {midi_path}")
-    
-    # Get MIDI stats
-    notes = sum(len(instr.notes) for instr in midi_obj.instruments)
-    duration = midi_obj.get_end_time()
-    print(f"Transcription stats: {notes} notes, {duration:.2f} seconds")
-        
-    return midi_path, notes, duration
+
+    json_path = output_dir / f"{audio_path.stem}_notes.json"
+    with open(json_path, "w") as f:
+        json.dump(note_tuples, f, indent=2)
+
+    print(f"Exported {len(note_tuples)} notes to {json_path}")
 
 if __name__ == "__main__":
     main() 

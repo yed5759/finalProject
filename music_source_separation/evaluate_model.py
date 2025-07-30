@@ -3,9 +3,35 @@
 import torch
 import numpy as np
 import pretty_midi
+import matplotlib.pyplot as plt
 from pathlib import Path
 from piano_transformer import PianoTransformer
 from audio_features import process_audio_file
+
+def compute_metrics(pred, target):
+    tp = ((pred == 1) & (target == 1)).sum()
+    fp = ((pred == 1) & (target == 0)).sum()
+    fn = ((pred == 0) & (target == 1)).sum()
+    tn = ((pred == 0) & (target == 0)).sum()
+    precision = tp / (tp + fp + 1e-8)
+    recall = tp / (tp + fn + 1e-8)
+    f1 = 2 * precision * recall / (precision + recall + 1e-8)
+    accuracy = (tp + tn) / (tp + tn + fp + fn + 1e-8)
+    return {'precision': precision, 'recall': recall, 'f1': f1, 'accuracy': accuracy}
+
+def plot_piano_rolls(pred_roll, gt_roll, start=0, end=200):
+        plt.figure(figsize=(12, 6))
+        plt.subplot(2, 1, 1)
+        plt.imshow(gt_roll[start:end].T, aspect='auto', origin='lower', cmap='Greys')
+        plt.title('Ground Truth Piano Roll')
+        plt.ylabel('MIDI Key')
+        plt.subplot(2, 1, 2)
+        plt.imshow(pred_roll[start:end].T, aspect='auto', origin='lower', cmap='Greys')
+        plt.title('Predicted Piano Roll')
+        plt.ylabel('MIDI Key')
+        plt.xlabel('Frame')
+        plt.tight_layout()
+        plt.show()
 
 def simple_evaluate():
     """
@@ -20,7 +46,7 @@ def simple_evaluate():
     
     # Find your model file
     # model_files = list(Path('models/piano_transformer').glob('*.pt'))
-    model_files = list(Path('models/checkpoints').glob('model_epoch_20.pt'))
+    model_files = list(Path('models/checkpoints').glob('model_epoch_10.pt'))
     if not model_files:
         model_files = list(Path('.').glob('*.pt'))
     
@@ -130,32 +156,42 @@ def simple_evaluate():
     
     # Convert to binary (0 or 1) - "Is this note playing?"
     ground_truth = (piano_roll > 0).astype(float)
-    predicted_notes = (predictions > 0.5).astype(float)  # 0.5 = threshold
+    predicted_notes = (predictions > 0.7).astype(float)  # 0.7 = threshold
     
     print(f"Comparison length: {min_length} frames")
     
     # Step 6: Compare and calculate how good your model is
     print("\n6️⃣ Checking how well your model did...")
-    
-    # Count correct predictions
+
+    # Sweep over several thresholds
+    for thresh in [0.3, 0.5, 0.7, 0.9, 0.925, 0.95]:
+        predicted_notes = (predictions > thresh).astype(float)
+        correct_predictions = (predicted_notes == ground_truth)
+        accuracy = correct_predictions.mean()
+        true_positives = ((predicted_notes == 1) & (ground_truth == 1)).sum()
+        false_positives = ((predicted_notes == 1) & (ground_truth == 0)).sum()
+        false_negatives = ((predicted_notes == 0) & (ground_truth == 1)).sum()
+        metrics = compute_metrics(predicted_notes, ground_truth)
+        print(f"\n--- Threshold: {thresh:.2f} ---")
+        print(f"   Accuracy: {metrics['accuracy']*100:.1f}%")
+        print(f"   Precision: {metrics['precision']*100:.1f}%")
+        print(f"   Recall: {metrics['recall']*100:.1f}%")
+        print(f"   F1 Score: {metrics['f1']*100:.1f}%")
+        print(f"   Correct Notes Found: {true_positives}/{int(ground_truth.sum())} ({100*true_positives/max(ground_truth.sum(),1):.1f}%)")
+        print(f"   Wrong Notes Added: {false_positives}")
+        print(f"   Notes Missed: {false_negatives}")
+
+    # Use default threshold for verdict and visualization
+    predicted_notes = (predictions > 0.95).astype(float) # Was 0.5
     correct_predictions = (predicted_notes == ground_truth)
     accuracy = correct_predictions.mean()
-    
-    # Count active notes
-    total_true_notes = ground_truth.sum()
-    total_predicted_notes = predicted_notes.sum()
-    
-    # Count hits and misses
     true_positives = ((predicted_notes == 1) & (ground_truth == 1)).sum()
     false_positives = ((predicted_notes == 1) & (ground_truth == 0)).sum()
     false_negatives = ((predicted_notes == 0) & (ground_truth == 1)).sum()
-    
-    print(f"📊 RESULTS:")
-    print(f"   Overall Accuracy: {accuracy:.1%}")
-    print(f"   Correct Notes Found: {true_positives}/{total_true_notes} ({100*true_positives/max(total_true_notes,1):.1f}%)")
-    print(f"   Wrong Notes Added: {false_positives}")
-    print(f"   Notes Missed: {false_negatives}")
-    
+
+    # Plot the first 200 frames (about 6 seconds at 512 hop, 16kHz)
+    plot_piano_rolls(predicted_notes, ground_truth, start=0, end=200)
+
     # Step 7: Give a simple verdict
     print(f"\n🎯 VERDICT:")
     if accuracy > 0.95:

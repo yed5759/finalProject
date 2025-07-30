@@ -17,13 +17,13 @@ MODEL_PATH = 'models/piano_transformer/model.pt'
 SAMPLE_RATE = 16000
 HOP_LENGTH = 512
 N_CQT_BINS = 88
-THRESHOLD = 0.5
+THRESHOLD = 0.925
 
 # Initialize model
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = PianoTransformer(
     n_cqt_bins=N_CQT_BINS,
-    hidden_dim=256,
+    hidden_dim=512,
     num_heads=8,
     num_layers=6,
     dropout=0.1

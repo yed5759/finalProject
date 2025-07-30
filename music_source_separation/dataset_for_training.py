@@ -56,13 +56,35 @@ class PianoTranscriptionDataset(Dataset):
         
         print(f"Found {len(self.audio_files)} piano pieces")
         print(f"Features directory: {self.features_dir}")
-    
+        # Build segment index
+        self.segment_indices = []
+        for song_idx, audio_file in enumerate(self.audio_files):
+            feature_file = self.features_dir / f"{audio_file.stem}_features.pkl"
+            features = load_or_extract_features(
+                audio_path=audio_file,
+                feature_path=feature_file,
+                extractor_fn=process_audio_file,
+                extractor_args={
+                    'sample_rate': self.sample_rate,
+                    'hop_length': self.hop_length,
+                    'n_cqt_bins': self.n_cqt_bins
+                },
+                fallback_shape=(100, self.n_cqt_bins)
+            )
+            num_frames = len(features)
+            if self.segment_length:
+                for start in range(0, num_frames - self.segment_length + 1, self.segment_length):
+                    self.segment_indices.append((song_idx, start))
+            else:
+                self.segment_indices.append((song_idx, 0))
+
     def __len__(self):
-        return len(self.audio_files)
+        return len(self.segment_indices)
     
     def __getitem__(self, idx):
-        audio_file = self.audio_files[idx]
-        midi_file = self.midi_files[idx]
+        song_idx, start = self.segment_indices[idx]
+        audio_file = self.audio_files[song_idx]
+        midi_file = self.midi_files[song_idx]
         
         try:
             # Define feature file path
@@ -98,9 +120,8 @@ class PianoTranscriptionDataset(Dataset):
             # Transpose piano roll to [time, pitch]
             piano_roll = piano_roll.T
             
-            # Get a random segment if needed
-            if self.segment_length and len(features) > self.segment_length:
-                start = np.random.randint(0, len(features) - self.segment_length)
+            # Use the indexed segment
+            if self.segment_length:
                 features = features[start:start + self.segment_length]
                 piano_roll = piano_roll[start:start + self.segment_length]
             
