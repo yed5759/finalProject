@@ -1,6 +1,43 @@
 import pretty_midi
 import numpy as np
 
+def midi_to_vexflow_note(midi_number):
+    NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    pitch_class = midi_number % 12
+    octave = (midi_number // 12) - 1
+    note_name = NOTE_NAMES[pitch_class]
+    return f"{note_name}/{octave}"
+
+def duration_to_vexflow(duration_sec, tempo_bpm=120):
+    beat_duration = 60 / tempo_bpm
+    beats = duration_sec / beat_duration
+
+    # Map to standard note durations
+    if abs(beats - 4) < 0.3:
+        return "w"  # whole
+    elif abs(beats - 2) < 0.25:
+        return "h"  # half
+    elif abs(beats - 1) < 0.2:
+        return "q"  # quarter
+    elif abs(beats - 0.5) < 0.1:
+        return "8"  # eighth
+    elif abs(beats - 0.25) < 0.05:
+        return "16"  # sixteenth
+    else:
+        return "q"  # fallback for unrecognized durations
+
+def note_tuples_to_vexflow(note_tuples, tempo_bpm=120):
+    vex_notes = []
+    sorted_notes = sorted(note_tuples, key=lambda x: x["startTime"])
+
+    for note in sorted_notes:
+        vex_note = {
+            "keys": [midi_to_vexflow_note(note["pitch"])],
+            "duration": duration_to_vexflow(note["duration"], tempo_bpm)
+        }
+        vex_notes.append(vex_note)
+    return vex_notes
+
 def piano_roll_to_note_tuples(piano_roll, hop_length, sample_rate):
     """
     Converts a binary piano roll (time_steps x 88) into a list of note dicts:

@@ -8,8 +8,7 @@ import soundfile as sf
 from dataset_for_training import pretty_midi
 import numpy as np
 import matplotlib.pyplot as plt
-from pathlib import Path
-from midi_utils import piano_roll_to_note_tuples
+from midi_utils import piano_roll_to_note_tuples, note_tuples_to_vexflow
 import pickle
 
 from piano_transformer import PianoTransformer
@@ -198,15 +197,12 @@ def generate_output(model, audio_features, device, args, output_dir, audio_path,
     piano_roll_path = save_piano_roll_figure(output_dir, audio_path, frame_probs, args.save_piano_roll)      
     
     notes, duration = save_midi_and_get_stats(
-        output_dir,
-        audio_path,
         frame_binary,
         hop_length=args.hop_length,
         sample_rate=args.sample_rate
     )
 
     return {
-        'note_tuples_path': output_dir / f"{audio_path.stem}_notes.json",
         'piano_roll_path': piano_roll_path,
         'notes': notes,
         'duration': duration
@@ -252,23 +248,18 @@ def save_piano_roll_figure(output_dir, audio_path, frame_probs, save_flag):
     return piano_roll_path
 
 # Convert predictions to tupples in json
-def save_midi_and_get_stats(output_dir, audio_path, frame_binary, hop_length, sample_rate):
+def save_midi_and_get_stats(frame_binary, hop_length, sample_rate):
     # Convert predictions to tupples
     note_tuples = piano_roll_to_note_tuples(
         frame_binary, hop_length=hop_length, sample_rate=sample_rate
     )
-
-    json_path = output_dir / f"{audio_path.stem}_notes.json"
-    with open(json_path, "w") as f:
-        json.dump(note_tuples, f, indent=2)
-
-    print(f"Exported {len(note_tuples)} notes to {json_path}")
+    notes = note_tuples_to_vexflow(note_tuples)
     if note_tuples:
         duration = max(note["startTime"] + note["duration"] for note in note_tuples)
     else:
         duration = 0.0
 
-    return note_tuples, duration
+    return notes, duration
 
 if __name__ == "__main__":
     main() 
