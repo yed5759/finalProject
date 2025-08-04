@@ -58,7 +58,7 @@ def download_audio(url):
                            Key=f"uploads/{song_key}")
             local_file = f"../Backend/temp/{song_key}"
             s3.download_file("songscache", f"upload/{song_key}", local_file)
-            return local_file
+            return local_file, name
 
         # download file
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -76,7 +76,7 @@ def download_audio(url):
             'Song URL': url,
             'expire time': int(time.time()) + (10 * 24 * 60 * 60)
         })
-        return name
+        return name, info['title']
 
     except Exception as e:
         print(f"Error downloading audio: {e}")

@@ -3,11 +3,13 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import {useRouter} from "next/navigation";
 
 export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
   const instrumentRef = useRef<HTMLSelectElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -41,11 +43,13 @@ export default function HomePage() {
         method: 'POST',
         body: formData,
       })
-      if (response.redirected) {
-        window.location.href = response.url;
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem("notes", JSON.stringify(data.notes));
+        router.push(data.redirect)
       } else {
-        const data = await response.text();
-        alert("Server response: " + data);
+        const text = await response.text();
+        alert("Server error: " + text);
       }
     } catch (error) {
       console.error("Error:", error);

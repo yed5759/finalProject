@@ -1,7 +1,10 @@
 # routes/auth.py
 
 from flask import Blueprint, request, jsonify
-from Backend.utils.auth import exchange_code_for_tokens, ensure_user_exists
+from Backend.utils.auth import (
+    exchange_code_for_tokens,
+    ensure_user_exists
+)
     
 auth_routes = Blueprint("auth", __name__)
 
@@ -10,12 +13,10 @@ def auth_callback():
     code = request.args.get("code")
 
     if not code:
-        print("No code provided")
         return jsonify({"error": "Missing code"}), 400
 
     tokens, error = exchange_code_for_tokens(code)
     if error:
-        print(error)
         return jsonify({"error": "Failed to exchange code", "details": error}), 400
 
     try:
@@ -34,5 +35,4 @@ def auth_callback():
         })
 
     except Exception as e:
-        print(str(e))
         return jsonify({"error": "Failed to process user", "details": str(e)}), 400
