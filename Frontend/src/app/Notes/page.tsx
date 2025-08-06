@@ -5,15 +5,22 @@
 import {Renderer, Stave, StaveNote, Voice, Formatter} from 'vexflow';
 import '../../styles/Notes.css'
 import CustomModal from '../../components/modal'
-import {useEffect, useRef} from "react";
+import {useEffect, useRef, useState} from "react";
+import {useSearchParams} from "next/navigation";
 
-type NotesProps = {
-    songName?: string;
-    notes?: string[];
-};
 
-export default function Notes({songName, notes}: NotesProps) {
+export default function Notes() {
     const vfRef = useRef<HTMLDivElement>(null);
+    const [notes, setNotes] = useState<string[]>([]);
+    const searchParams = useSearchParams();
+    const songName = searchParams.get("songName");
+
+    useEffect(() => {
+        const storedNotes = localStorage.getItem("notes");
+        if (storedNotes) {
+            setNotes(JSON.parse(storedNotes));
+        }
+    }, []);
 
     useEffect(() => {
         if (!vfRef.current) return;
