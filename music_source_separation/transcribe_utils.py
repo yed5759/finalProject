@@ -1,4 +1,4 @@
-from main import transcribe_audio
+from .main import transcribe_audio
 import argparse
 
 def transcribe_piano_audio(input_audio, model_path='models/piano_transformer/model.pt', output_dir="output", save_roll=False):

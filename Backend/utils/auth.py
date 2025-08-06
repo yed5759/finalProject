@@ -4,7 +4,7 @@ import os
 import requests
 import jwt
 from dotenv import load_dotenv
-from utils.db import get_db
+from Backend.utils.db import get_db
 
 # Load environment variables from .env file
 load_dotenv()

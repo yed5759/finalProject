@@ -5,6 +5,7 @@ from routes.auth import auth_routes
 from routes.user import user_routes
 from routes.songs import songs_routes
 from routes.sharing import sharing_routes
+from routes.model import home_routes
 
 app = Flask(__name__)
 
@@ -16,6 +17,7 @@ app.register_blueprint(auth_routes)
 app.register_blueprint(user_routes)
 app.register_blueprint(songs_routes)
 app.register_blueprint(sharing_routes)
+app.register_blueprint(home_routes)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

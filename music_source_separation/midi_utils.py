@@ -1,5 +1,4 @@
 import pretty_midi
-import numpy as np
 
 def midi_to_vexflow_note(midi_number):
     NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']

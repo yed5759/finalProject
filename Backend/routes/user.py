@@ -1,8 +1,8 @@
 # routes/user.py
 
 from flask import Blueprint, request, jsonify
-from utils.user import get_user_by_token
-from utils.db import get_db
+from Backend.utils.user import get_user_by_token
+from Backend.utils.db import get_db
 
 user_routes = Blueprint("user", __name__)
 

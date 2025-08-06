@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
 import torch
-import librosa
-import soundfile as sf
-from dataset_for_training import pretty_midi
 import numpy as np
 import matplotlib.pyplot as plt
-from midi_utils import piano_roll_to_note_tuples, note_tuples_to_vexflow
+from music_source_separation.midi_utils import piano_roll_to_note_tuples, note_tuples_to_vexflow
 import pickle
 
-from piano_transformer import PianoTransformer
-from audio_features import process_audio_file
+from music_source_separation.piano_transformer import PianoTransformer
+from music_source_separation.audio_features import process_audio_file
 from pathlib import Path
-import json
+
 
 
 
@@ -261,5 +257,5 @@ def save_midi_and_get_stats(frame_binary, hop_length, sample_rate):
 
     return notes, duration
 
-if __name__ == "__main__":
-    main() 
+#if __name__ == "__main__":
+#    main()

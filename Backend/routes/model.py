@@ -20,4 +20,4 @@ def create_notes():
         return 'there was an error in the prediction', 422
     redirect_url = url_for('notes', songName=title)
     return jsonify({'redirect': redirect_url,
-                    'notes': prediction['notes']}), 200
+                    'notes': prediction['notes']})
