@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, url_for
+from flask import Blueprint, request, jsonify
 from Backend.utils.inputProcessors import download_audio
 from music_source_separation.transcribe_utils import transcribe_piano_audio
 
@@ -18,6 +18,5 @@ def create_notes():
     prediction = transcribe_piano_audio(filepath)
     if not prediction:
         return 'there was an error in the prediction', 422
-    redirect_url = url_for('notes', songName=title)
-    return jsonify({'redirect': redirect_url,
+    return jsonify({'redirect': f'/Notes?songName={title}',
                     'notes': prediction['notes']})

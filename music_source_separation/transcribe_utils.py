@@ -1,7 +1,12 @@
 from .main import transcribe_audio
+from pathlib import Path
 import argparse
 
-def transcribe_piano_audio(input_audio, model_path='models/piano_transformer/model.pt', output_dir="output", save_roll=False):
+def transcribe_piano_audio(input_audio, model_path=None, output_dir="output", save_roll=False):
+    if model_path is None:
+        model_path = Path(__file__).parent / "models" / "piano_transformer" / "model.pt"
+        model_path = model_path.resolve()
+
     args = argparse.Namespace(
         audio_file=input_audio,
         model_path=model_path,
