@@ -35,7 +35,7 @@ def main():
     # Model parameters (used if not found in checkpoint)
     parser.add_argument('--n-cqt-bins', type=int, default=88,
                         help='Number of CQT bins')
-    parser.add_argument('--hidden-dim', type=int, default=256,
+    parser.add_argument('--hidden-dim', type=int, default=512,
                         help='Hidden dimension of the model')
     parser.add_argument('--num-layers', type=int, default=6,
                         help='Number of transformer layers')

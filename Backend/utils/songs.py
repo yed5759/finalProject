@@ -15,11 +15,8 @@ def get_songs_for_user(user_id):
 # Add a new song to user's songs list
 def add_song_to_user(user_id, song_data):
     db = get_db()
-    # Ensure required fields
-    if "info" not in song_data:
-        raise ValueError("information is required")
-
-    song_data["id"] = str(uuid4())  # Assign a UUID
+    
+    song_data["id"] = str(uuid4())  # Assign a UUI
     song_data.setdefault("artist", None)
     song_data.setdefault("notes", [])
     song_data.setdefault("tags", [])

@@ -19,4 +19,4 @@ def create_notes():
     if not prediction:
         return 'there was an error in the prediction', 422
     return jsonify({'redirect': f'/Notes?songName={title}',
-                    'notes': prediction['notes']})
+                    'notes': prediction['notes']}), 200

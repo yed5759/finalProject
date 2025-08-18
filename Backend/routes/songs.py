@@ -48,6 +48,7 @@ def add_song():
     if error:
         return jsonify({"error": error}), 401
     song_data = request.get_json()
+    print(song_data)
     added_song = add_song_to_user(user["_id"], song_data)
     return jsonify(added_song)
 
