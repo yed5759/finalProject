@@ -39,7 +39,7 @@ def get_song(song_id):
     user, error = get_user_from_request()
     if error:
         return jsonify({"error": error}), 401
-    return jsonify(get_song_by_id(user["_id"], song_id))
+    return jsonify(get_song_by_id(user["_id"], song_id)), 200
 
 # POST /songs
 @songs_routes.route("/songs", methods=["POST"])
