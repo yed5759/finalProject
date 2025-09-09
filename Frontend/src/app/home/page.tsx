@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {useRouter} from "next/navigation";
 
 export default function HomePage() {
@@ -10,6 +10,7 @@ export default function HomePage() {
   const urlInputRef = useRef<HTMLInputElement>(null);
   const instrumentRef = useRef<HTMLSelectElement>(null);
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -19,7 +20,7 @@ export default function HomePage() {
 
   async function SmartSubmit(e: { preventDefault: () => void }) {
     e.preventDefault();
-
+    setLoading(true);
     const fileInput = document.getElementById('upload') as HTMLInputElement | null;
     const urlInput = document.getElementById('url') as HTMLInputElement | null;
 
@@ -36,6 +37,7 @@ export default function HomePage() {
       formData.append("url", url);
     } else {
       alert('Please upload a file or enter a URL!');
+      setLoading(false);
       return
     }
     try {
@@ -45,15 +47,17 @@ export default function HomePage() {
       })
       if (response.ok) {
         const data = await response.json();
-        localStorage.setItem("notes", JSON.stringify(data.notes));
+        localStorage.setItem(`notes-${data.redirect.split("=")[1]}`, JSON.stringify(data.notes));
         router.push(data.redirect)
       } else {
         const text = await response.text();
         alert("Server error: " + text);
+        setLoading(false);
       }
     } catch (error) {
       console.error("Error:", error);
       alert("Something went wrong!");
+      setLoading(false);
     }
   }
 
@@ -85,7 +89,13 @@ export default function HomePage() {
       <div className="d-flex justify-content-center align-items-center gap-3 m-3">
         <div className="btn-group" role="group">
           <button className="" onClick={SmartSubmit}>
-            Generate Notes
+            {loading && (
+                <span
+                    className="spinner-border spinner-border-sm me-2"
+                    aria-hidden="true"
+                ></span>
+            )}
+            {loading ? "Generating..." : "Generate Notes"}
           </button>
         </div>
       </div>

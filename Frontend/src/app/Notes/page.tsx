@@ -3,11 +3,10 @@
 'use client';
 
 import {Renderer, Stave, StaveNote, Voice, Formatter} from 'vexflow';
-import Flow from 'vexflow';
 import '../../styles/Notes.css'
 import CustomModal from '../../components/modal'
 import {useEffect, useRef, useState} from "react";
-import {useSearchParams} from "next/navigation";
+import {useSearchParams, useRouter} from "next/navigation";
 
 
 export default function Notes() {
@@ -15,29 +14,31 @@ export default function Notes() {
     const [notes, setNotes] = useState<{ keys: string[]; duration: string }[]>([]);
     const searchParams = useSearchParams();
     const songName = searchParams.get("songName");
+    const router = useRouter();
 
     useEffect(() => {
-        const storedNotes = localStorage.getItem("notes");
-        if (storedNotes) {
-            setNotes(JSON.parse(storedNotes));
+        if (songName != null) {
+            const storedNotes = localStorage.getItem(`notes-${songName}`);
+            if (storedNotes) {
+                setNotes(JSON.parse(storedNotes));
+            } else {
+                setNotes([]);
+            }
+        } else {
+            setNotes([]);
         }
-    }, []);
+    }, [songName]);
 
     useEffect(() => {
         if (!vfRef.current) return;
         vfRef.current.innerHTML = '';
 
-        const TICKS_PER_MEASURE = 4 * Flow.RESOLUTION;
-        const givenNotes =
-            (notes || [])
-                .filter(note => {
+        const givenNotes = (notes || []).filter(note => {
                     return (
                         Array.isArray(note.keys) &&
-                        typeof note.duration === "string" &&
                         note.keys.length > 0
                     );
-                })
-                .map(note => {
+                }).map(note => {
                     try {
                         return new StaveNote({
                             keys: note.keys,
@@ -47,15 +48,19 @@ export default function Notes() {
                         console.warn("Invalid note skipped:", note, e);
                         return null;
                     }
-                })
-                .filter((n): n is StaveNote => n !== null);
+                }).filter((n): n is StaveNote => n !== null);
 
         const groups = chunk(givenNotes, 16); // draw 16 notes per stave
+
+        const minStaves = 4;
+        while (groups.length < minStaves) {
+            groups.push([]); // empty group → renders as blank stave
+        }
 
         const renderer = new Renderer(vfRef.current, Renderer.Backends.SVG);
         const ctx = renderer.getContext();
 
-        const STAVE_HEIGHT = 100;
+        const STAVE_HEIGHT = 90;
         const TOP_MARGIN = 10;
         const BOTTOM_BUFFER = 10;
 
@@ -66,44 +71,63 @@ export default function Notes() {
 
         groups.forEach((group, index) => {
             const stave = new Stave(10, y, 1400);
-            stave.addClef('treble').setContext(ctx).draw();
+            stave.addClef('treble') .addTimeSignature('4/4').setContext(ctx).draw();
 
             // Apply stave to every note (this is required for positioning)
-            group.forEach(note => note.setStave(stave));
+            if (group.length > 0) {
+                // Attach stave + context to every note (v4 needs this)
+                group.forEach(note => {
+                    note.setStave(stave);
+                    note.setContext(ctx);
+                });
 
-            try {
-                const voice = new Voice({ time: "4/4" }).setStrict(false);
-                voice.addTickables(group);
-                new Formatter().joinVoices([voice]).format([voice], 1200);
-                voice.draw(ctx, stave);
-            } catch (err) {
-                console.error(`Failed to draw voice for group ${index}:`, err);
+                try {
+                    const voice = new Voice({numBeats: 4, beatValue: 4})
+                    voice.setMode(Voice.Mode.SOFT);
+
+                    voice.addTickables(group);
+                    new Formatter().joinVoices([voice]).format([voice], 1200);
+                    voice.draw(ctx, stave);
+                } catch (err) {
+                    console.error(`Failed to draw voice for group ${index}:`, err);
+                }
             }
-
-            y += STAVE_HEIGHT;
-        });
-
-        console.log("Successfully rendered", groups.length, "staves.");
+            y += STAVE_HEIGHT;});
     }, [songName, notes]);
 
     function chunk<T>(arr: T[], size: number): T[][] {
-        return Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+        return Array.from({length: Math.ceil(arr.length / size)}, (_, i) =>
             arr.slice(i * size, i * size + size)
         );
     }
 
+    const handleBack = () => {
+        const stack = JSON.parse(sessionStorage.getItem("navStack") || "[]");
+        if (stack.length > 1) {
+            // remove current page
+            stack.pop();
+            const last = stack.pop(); // get previous
+            sessionStorage.setItem("navStack", JSON.stringify(stack));
 
+            if (last) {
+                router.push(last);
+                return;
+            }
+        }
+        // fallback
+        router.push("/");
+    };
     // @ts-ignore
     return (
         <div className="container d-flex flex-column justify-content-start align-items-center text-center"
-             style={{ height: '100vh', overflow: 'hidden' }}>
+             style={{height: '100vh', overflow: 'hidden'}}>
             {!songName
-                ? <h6 className="title"><big>Taking Notes!</big></h6>
-                : <h6 className="title">{songName}</h6>
+                ? <div className="title">Taking Notes!</div>
+                : <div className="title">{songName}</div>
             }
             <div className="underline"></div>
 
-            <div className="d-flex gap-3 mt-4">
+            <div className="d-flex gap-3 mt-2">
                 <button type="button" className="btn" style={{width: '10pc', background: "#d59efb"}}
                         data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save Notes
                 </button>
@@ -118,10 +142,19 @@ export default function Notes() {
                     maxHeight: 'calc(100vh - 320px)',
                     padding: '0',
                     scrollbarWidth: 'none', // Firefox
-                    msOverflowStyle: 'none'}}>
-                <div ref={vfRef} style={{ width: '100%' }} />
+                    msOverflowStyle: 'none'
+                }}>
+                <div ref={vfRef} style={{width: '100%'}}/>
             </div>
             <CustomModal notes={notes}/>
+            <div className="container-md justify-content-start mt-3">
+                <div className="d-grid gap-2 col-6 mx-1">
+                    <button type="button" className="btn btn-light rounded-0 btn-outline-dark"
+                            style={{backgroundColor: "lightgray", color: "black"}}
+                            onClick={handleBack}> back
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

@@ -2,8 +2,9 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { MdDelete, MdShare } from 'react-icons/md';
+import React, {useState, useEffect} from 'react';
+import {MdDelete, MdShare} from 'react-icons/md';
+import {useRouter} from "next/navigation";
 
 type Song = {
     id: string;
@@ -20,15 +21,36 @@ export default function MyLibrary() {
     const [songs, setSongs] = useState<Song[]>([]);
     // State for search query
     const [searchQuery, setSearchQuery] = useState('');
+    const router = useRouter();
 
     // Filter songs based on search query
+    const query = searchQuery.toLowerCase();
     const filteredSongs = songs.filter((song) =>
-        song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (song.artist && song.artist.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (song.tags && song.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))) // if search query matches any tag
+        song.title?.toLowerCase().includes(query) ||
+        song.artist?.toLowerCase().includes(query) ||
+        song.tags?.some(tag => tag?.toLowerCase().includes(query))
     );
 
-    // Handle deleting a song widh given id
+    async function getSong(id: string, name: string) {
+        try {
+            const res = await fetch(`http://localhost:5000/songs/${id}`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem("id_token")}`
+                },
+            });
+            if (res.ok) {
+                const data = await res.json()
+                const notes = data['notes']
+                localStorage.setItem(`notes-${name}`, JSON.stringify(notes))
+                router.push(`/Notes?songName=${name}`)
+            }
+        } catch (error: any) {
+            throw new Error(error?.message || "Failed to fetch song")
+        }
+    }
+
+    // Handle deleting a song width given id
     const handleDelete = async (id: string) => {
         try {
             const res = await fetch(`http://localhost:5000/songs/${id}`, {
@@ -37,11 +59,10 @@ export default function MyLibrary() {
                     Authorization: `Bearer ${localStorage.getItem("id_token")}`,
                 },
             });
-
-            if (!res.ok) throw new Error("Failed to delete song");
-
             // Delete from client side
-            setSongs(prevSongs => prevSongs.filter(song => song.id !== id));
+            if (res.ok) {
+                setSongs(prevSongs => prevSongs.filter(song => song.id !== id));
+            }
         } catch (error) {
             console.error("Error deleting song:", error);
             alert("שגיאה במחיקת שיר");
@@ -63,155 +84,104 @@ export default function MyLibrary() {
                 },
             });
 
-            if (!res.ok) throw new Error("Failed to fetch songs");
-
-            const data = await res.json();
-            setSongs(data);
+            if (res.ok) {
+                const data = await res.json();
+                setSongs(data);
+            }
         } catch (error) {
             console.error("Error fetching songs:", error);
             alert("שגיאה בטעינת רשימת השירים");
         }
     };
 
-    // //todo delete this function after testing
-    // const handleAddConstSong = async () => {
-    //     try {
-    //         const res = await fetch("http://localhost:5000/songs/add-const", {
-    //             method: "POST",
-    //             headers: {
-    //                 "Content-Type": "application/json",
-    //                 Authorization: `Bearer ${localStorage.getItem("id_token")}`, // adjust this if your token is stored elsewhere
-    //             },
-    //         });
-
-    //         if (!res.ok) throw new Error("Failed to add test song");
-
-    //         const data = await res.json();
-    //         setSongs(prevSongs => [...prevSongs, data.song]);
-    //     } catch (error) {
-    //         if (error instanceof Error) {
-    //             alert("Error adding test song: " + error.message);
-    //         } else {
-    //             alert("An unknown error occurred.");
-    //         }
-    //     }
-
-    // };
-
-
     useEffect(() => {
         // Get list of songs
-        fetchSongs();
-
+        fetchSongs().then(() => {});
         // Listener to song-added event
         bc.onmessage = (event) => {
             if (event.data?.type === "song-added") {
-                fetchSongs(); // Refresh list of songs
+                fetchSongs().then(() => {}); // Refresh list of songs
             }
         };
 
         return () => {
-            bc.close(); // מנקה את הערוץ כשהקומפוננטה נסגרת
+            bc.close();
         };
     }, []);
 
     return (
-        <>
-            <h2 style={{ marginLeft: '70px' }}>My Library</h2>
-
-            {/* Search bar */}
-            <div style={{ margin: '20px 70px' }}>
-                <input
-                    type="text"
-                    placeholder="Search for song, artist, or tag"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{
-                        width: '100%',
-                        padding: '10px',
-                        fontSize: '16px',
-                        borderRadius: '4px',
-                        border: '1px solid #ccc',
-                    }}
-                />
-            </div>
-
-            {/* Add Const Song Button - מתחת לסרגל החיפוש
-            <div style={{ margin: '0 70px 20px 70px' }}>
-                <button
-                    onClick={handleAddConstSong}
-                    style={{
-                        padding: '10px 20px',
-                        fontSize: '16px',
-                        borderRadius: '4px',
-                        backgroundColor: '#28a745',
-                        color: 'white',
-                        border: 'none',
-                        cursor: 'pointer',
-                    }}
-                >
-                    Add Const Song
-                </button>
-            </div> */}
-
-            <div style={{ maxHeight: '500px', overflowY: 'scroll', border: '1px solid #ccc', padding: '10px', margin: '30px 70px' }}>
-                <ul style={{ listStyleType: 'none', padding: 0 }}>
+        <div className="container d-flex flex-column justify-content-start align-items-start text-start">
+            <h2>My Library</h2>
+            <input className="form-control"
+                   type="text"
+                   placeholder="Search for song, artist, or tag"
+                   value={searchQuery}
+                   onChange={(e) => setSearchQuery(e.target.value)}/>
+            <div className="w-50"
+                 style={{
+                     maxHeight: '500px',
+                     overflowY: 'scroll'}}>
+                <div className="list-group list-group-numbered">
                     {filteredSongs.map((song, index) => (
-                        <li key={song.id} style={{ padding: '10px', borderBottom: index !== filteredSongs.length - 1 ? '1px solid black' : 'none' }}>
-                            {/* Container for the song title, delete, and share buttons */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                {/* Song title */}
-                                <h3 style={{ margin: 0 }}>{song.title}</h3>
+                        <div
+                            role="button"
+                            style={{
+                                padding: '10px',
+                                borderBottom: index !== filteredSongs.length - 1 ? '1px solid black' : 'none',
+                                backgroundColor: 'seashell',
+                                cursor: "pointer",}}
+                            className="list-group-item list-group-item-action d-flex"
+                            key={song.id} onClick={() => getSong(song.id, song.title)}
+                        >
+                            <div className="flex-fill">
+                                <h5 style={{marginBottom: '0px'}} className="ps-3"><strong>{song.title}</strong></h5>
+                                {song.artist && (
+                                    <p style={{marginBottom: '0px'}} className="ps-3">
+                                        <strong>Artist:</strong> {song.artist}</p>
+                                )}
 
-                                {/* Buttons container */}
-                                <div style={{ display: 'flex', gap: '10px' }}>
-                                    {/* Delete icon button */}
-                                    <button
-                                        onClick={() => handleDelete(song.id)}
-                                        style={{
-                                            padding: '5px',
-                                            backgroundColor: 'transparent',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            fontSize: '20px',
-                                        }}
-                                        title="Delete"
-                                    >
-                                        <MdDelete />
-                                    </button>
-
-                                    {/* Share icon button */}
-                                    <button
-                                        onClick={() => handleShare(song)}
-                                        style={{
-                                            padding: '5px',
-                                            backgroundColor: 'transparent',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            fontSize: '20px',
-                                        }}
-                                        title="Share"
-                                    >
-                                        <MdShare />
-                                    </button>
-                                </div>
+                                {/* Display tags only if there are tags */}
+                                {song.tags && song.tags.length > 0 && (
+                                    <p style={{marginBottom: '0px'}} className="ps-3">
+                                        {song.tags}
+                                        <strong>Tags:</strong> {song.tags.join(', ')}
+                                    </p>
+                                )}
                             </div>
-
+                            {/* Buttons container */}
+                            <div className="d-flex justify-content-end">
+                                {/* Delete icon button */}
+                                <button
+                                    onClick={() => handleDelete(song.id)}
+                                    style={{
+                                        padding: '5px',
+                                        backgroundColor: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '20px',
+                                    }}
+                                    title="Delete">
+                                    <MdDelete/>
+                                </button>
+                                {/* Share icon button */}
+                                <button
+                                    onClick={() => handleShare(song)}
+                                    style={{
+                                        padding: '5px',
+                                        backgroundColor: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '20px',
+                                    }}
+                                    title="Share">
+                                    <MdShare/>
+                                </button>
+                            </div>
                             {/* Display artist only if available */}
-                            {song.artist && (
-                                <p style={{ marginBottom: '0px' }}><strong>Artist:</strong> {song.artist}</p>
-                            )}
-
-                            {/* Display tags only if there are tags */}
-                            {song.tags && song.tags.length > 0 && (
-                                <p style={{ marginBottom: '0px' }}>
-                                    <strong>Tags:</strong> {song.tags.join(', ')}
-                                </p>
-                            )}
-                        </li>
+                        </div>
                     ))}
-                </ul>
+                </div>
             </div>
-        </>
+        </div>
     );
 }

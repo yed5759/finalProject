@@ -2,14 +2,10 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Playwrite+AU+SA:wght@100..400&display=swap');
 
-h6 {
-    font-size: 5em;
-    font-family: 'Playwrite AU SA', serif;
-}
-
 .title {
-    font-size: 4rem;
+    font-size: 3rem;
     font-weight: bold;
+    font-family: 'Playwrite AU SA', serif;
 }
 
 .underline {
