@@ -26,7 +26,6 @@ export default function Navbar() {
 
         <div className="navbar-links">
           <Link href="/home" className={pathname === '/home' ? 'active' : ''}> <FaHome /> Home </Link>
-          {/* todo maybe delete */}
           <Link href="/Notes" className={pathname === '/Notes' ? 'active' : ''}> <FaMusic /> Notes </Link>
           <Link href="/MyLibrary" className={pathname === '/MyLibrary' ? 'active' : ''}> <FaBook /> My Library </Link>
         </div>

@@ -2,11 +2,12 @@
 
 'use client';
 
-import {Renderer, Stave, StaveNote, Voice, Formatter} from 'vexflow';
+import {Formatter, Renderer, Stave, StaveNote, Voice} from 'vexflow';
 import '../../styles/Notes.css'
 import CustomModal from '../../components/modal'
 import {useEffect, useRef, useState} from "react";
-import {useSearchParams, useRouter} from "next/navigation";
+import {useRouter, useSearchParams} from "next/navigation";
+import DownloadDropdown from "../../components/dropdownSelect";
 
 
 export default function Notes() {
@@ -34,73 +35,110 @@ export default function Notes() {
         vfRef.current.innerHTML = '';
 
         const givenNotes = (notes || []).filter(note => {
-                    return (
-                        Array.isArray(note.keys) &&
-                        note.keys.length > 0
-                    );
-                }).map(note => {
-                    try {
-                        return new StaveNote({
-                            keys: note.keys,
-                            duration: note.duration,
-                        });
-                    } catch (e) {
-                        console.warn("Invalid note skipped:", note, e);
-                        return null;
-                    }
-                }).filter((n): n is StaveNote => n !== null);
+            return (
+                Array.isArray(note.keys) &&
+                note.keys.length > 0
+            );
+        }).map(note => {
+            try {
+                return new StaveNote({
+                    keys: note.keys,
+                    duration: note.duration,
+                });
+            } catch (e) {
+                console.warn("Invalid note skipped:", note, e);
+                return null;
+            }
+        }).filter((n): n is StaveNote => n !== null);
 
-        const groups = chunk(givenNotes, 16); // draw 16 notes per stave
+        const measures = groupByMeasures(givenNotes, 4);  // draw 16 notes per stave
 
-        const minStaves = 4;
-        while (groups.length < minStaves) {
-            groups.push([]); // empty group → renders as blank stave
+        function groupMeasuresIntoSystems(measures: StaveNote[][], measuresPerSystem = 4) {
+            const systems: StaveNote[][][] = [];
+            for (let i = 0; i < measures.length; i += measuresPerSystem) {
+                systems.push(measures.slice(i, i + measuresPerSystem));
+            }
+            return systems;
         }
 
+        const systems = groupMeasuresIntoSystems(measures, 4);
+        // --- Renderer ---
         const renderer = new Renderer(vfRef.current, Renderer.Backends.SVG);
         const ctx = renderer.getContext();
 
         const STAVE_HEIGHT = 90;
-        const TOP_MARGIN = 10;
-        const BOTTOM_BUFFER = 10;
+        const TOP_MARGIN = 0;
+        const BOTTOM_BUFFER = 40;
 
-        const height = groups.length * STAVE_HEIGHT + TOP_MARGIN + BOTTOM_BUFFER;
+        const height = systems.length * STAVE_HEIGHT + TOP_MARGIN + BOTTOM_BUFFER;
         renderer.resize(1400, height);
 
-        let y = 10;
+        let y = -20;
 
-        groups.forEach((group, index) => {
+// --- ציור ---
+        systems.forEach((system, index) => {
             const stave = new Stave(10, y, 1400);
-            stave.addClef('treble') .addTimeSignature('4/4').setContext(ctx).draw();
+            stave.addClef('treble').addTimeSignature('4/4').setContext(ctx).draw();
 
-            // Apply stave to every note (this is required for positioning)
-            if (group.length > 0) {
-                // Attach stave + context to every note (v4 needs this)
-                group.forEach(note => {
+            // מאחדים את כל התווים מהתיבות
+            const notesInSystem = system.flat();
+
+            if (notesInSystem.length > 0) {
+                notesInSystem.forEach(note => {
                     note.setStave(stave);
                     note.setContext(ctx);
                 });
 
                 try {
-                    const voice = new Voice({numBeats: 4, beatValue: 4})
+                    const voice = new Voice({ numBeats: 4, beatValue: 4 });
                     voice.setMode(Voice.Mode.SOFT);
 
-                    voice.addTickables(group);
+                    voice.addTickables(notesInSystem);
                     new Formatter().joinVoices([voice]).format([voice], 1200);
                     voice.draw(ctx, stave);
                 } catch (err) {
-                    console.error(`Failed to draw voice for group ${index}:`, err);
+                    console.error(`Failed to draw voice for system ${index}:`, err);
                 }
             }
-            y += STAVE_HEIGHT;});
+
+            y += STAVE_HEIGHT;
+        });
     }, [songName, notes]);
 
-    function chunk<T>(arr: T[], size: number): T[][] {
-        return Array.from({length: Math.ceil(arr.length / size)}, (_, i) =>
-            arr.slice(i * size, i * size + size)
-        );
+
+    function groupByMeasures(notes: StaveNote[], beatsPerMeasure = 4): StaveNote[][] {
+        const measures: StaveNote[][] = [];
+        let current: StaveNote[] = [];
+        let beats = 0;
+
+        notes.forEach(note => {
+            current.push(note);
+            beats += durationToBeats(note.getDuration());
+
+            if (beats >= beatsPerMeasure) {
+                measures.push(current);
+                current = [];
+                beats = 0;
+            }
+        });
+
+        if (current.length > 0) {
+            measures.push(current);
+        }
+
+        return measures;
     }
 
+    function durationToBeats(duration: string): number {
+        switch (duration) {
+            case "w": return 4;     // whole note
+            case "h": return 2;     // half note
+            case "q": return 1;     // quarter note
+            case "8": return 0.5;   // eighth note
+            case "16": return 0.25; // sixteenth note
+            default: return 1;      // ברירת מחדל לרבע
+        }
+    }
     const handleBack = () => {
         const stack = JSON.parse(sessionStorage.getItem("navStack") || "[]");
         if (stack.length > 1) {
@@ -127,12 +165,12 @@ export default function Notes() {
             }
             <div className="underline"></div>
 
-            <div className="d-flex gap-3 mt-2">
+            <div className="d-flex gap-3 mt-3">
                 <button type="button" className="btn" style={{width: '10pc', background: "#d59efb"}}
                         data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save Notes
                 </button>
                 <button className="btn" style={{width: '10pc', background: "#5ac9d6"}}>Edit Notes</button>
-                <button className="btn" style={{width: '10pc', background: "#59cf59"}}>Download</button>
+                <DownloadDropdown vfRef={vfRef} notes={notes}/>
             </div>
             <div
                 className="w-100 mt-4"
