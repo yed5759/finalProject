@@ -1,5 +1,4 @@
 import os
-import re
 
 import yt_dlp
 
@@ -18,7 +17,7 @@ def download_audio(url):
                 "preferredquality": "192",
             }
         ],
-        "outtmpl": "../temp/%(title)s.%(ext)s",
+        "outtmpl": "./temp/%(title)s.%(ext)s",
         "quiet": True,
     }
     try:

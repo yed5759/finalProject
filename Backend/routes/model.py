@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 from flask import Blueprint, request, jsonify
+from werkzeug.utils import secure_filename
 
 from Backend.services.vexflow import midi_to_vexflow_key, seconds_to_duration
 from Backend.utils.inputProcessors import download_audio
@@ -10,6 +11,8 @@ import soundfile as sf
 import numpy as np
 import librosa
 import os
+import uuid
+import resampy
 
 home_routes = Blueprint("home", __name__)
 CHORD_TOLERANCE = 0.03  # 30ms
@@ -17,8 +20,7 @@ CHORD_TOLERANCE = 0.03  # 30ms
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 model_path = os.path.abspath(os.path.join(
     BASE_DIR,
-    "..", "..", "gitmodel", "runs",
-    "transcriber-250829-140847",
+    "..", "static",
     "model-500000.pt"
 ))
 
@@ -34,12 +36,22 @@ def create_notes():
         filepath, title = download_audio(content)
     else:
         content = request.files.get('file')
-        title = content.filename
-        content.save(f'../temp/{title}')
-        filepath = f'../temp/{title}'
+        title = secure_filename(content.filename)
+        base_dir = os.path.dirname(os.path.dirname(__file__))  # עולה תיקייה מעל Backend/routes
+        save_dir = os.path.join(base_dir, "temp")
+        os.makedirs(save_dir, exist_ok=True)
 
-    audio, sr = sf.read(filepath)
-    assert sr == SAMPLE_RATE, f"Expected {SAMPLE_RATE}, got {sr}"
+        filepath = os.path.join(save_dir, title)
+        content.save(filepath)
+
+    audio, sr = sf.read(filepath, dtype='float32')
+
+    if audio.ndim > 1:
+        audio = librosa.to_mono(audio.T)
+
+    if sr != SAMPLE_RATE:
+        audio = resampy.resample(audio, sr, SAMPLE_RATE, filter="kaiser_fast")
+        sr = SAMPLE_RATE
 
     audio_tensor = torch.tensor(audio, dtype=torch.float32).unsqueeze(0).to(device)
 
@@ -107,8 +119,10 @@ def create_notes():
     vexflow_notes = []
     for note in render_notes:
         vexflow_notes.append({
+            "id" : str(uuid.uuid4()),
             "keys" : [midi_to_vexflow_key(p) for p in note["pitches"]],
             "duration": seconds_to_duration(note["duration"], bpm=tempo)
         })
+    os.remove(filepath)
     return jsonify({'redirect': f'/Notes?songName={title}',
                     'notes': vexflow_notes}), 200
