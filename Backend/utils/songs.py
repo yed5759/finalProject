@@ -1,7 +1,7 @@
 # utils/songs.py
 
 from pymongo import ReturnDocument
-from Backend.utils.db import get_db
+from utils.db import get_db
 from uuid import uuid4
 
 # Get songs list for a user by their sub (user id)

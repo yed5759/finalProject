@@ -1,7 +1,7 @@
 # routes/auth.py
 
 from flask import Blueprint, request, jsonify
-from Backend.utils.auth import (
+from utils.auth import (
     exchange_code_for_tokens,
     ensure_user_exists
 )

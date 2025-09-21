@@ -1,8 +1,8 @@
 # utils/sharing.py
 
-from Backend.utils.db import get_db
+from utils.db import get_db
 from uuid import uuid4
-from Backend.utils.songs import add_song_to_user
+from utils.songs import add_song_to_user
 
 # Share a song to another user (adds to their 'shared_songs')
 def share_song_to_user(sender_id, recipient_username, song_data):

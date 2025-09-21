@@ -3,8 +3,8 @@ from collections import defaultdict
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 
-from Backend.services.vexflow import midi_to_vexflow_key, seconds_to_duration
-from Backend.utils.inputProcessors import download_audio
+from services.vexflow import midi_to_vexflow_key, seconds_to_duration
+from utils.inputProcessors import download_audio
 from onsets_and_frames import *
 import torch
 import soundfile as sf

@@ -1,8 +1,8 @@
 # routes/songs.py
 
 from flask import Blueprint, request, jsonify
-from Backend.utils.user import get_user_by_token
-from Backend.utils.songs import (
+from utils.user import get_user_by_token
+from utils.songs import (
     get_songs_for_user, add_song_to_user,
     delete_song_from_user, update_song_for_user,
     get_song_by_id

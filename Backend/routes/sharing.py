@@ -1,8 +1,8 @@
 # routes/sharing.py
 
 from flask import Blueprint, request, jsonify
-from Backend.utils.user import get_user_by_token
-from Backend.utils.sharing import (
+from utils.user import get_user_by_token
+from utils.sharing import (
     share_song_to_user,
     get_shared_songs_for_user, 
     accept_shared_song
