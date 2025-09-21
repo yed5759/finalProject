@@ -1,8 +1,10 @@
 pymongo
 requests
 pyJWT
-python-dotenv~=1.1.0
-yt-dlp~=2025.3.27
+python-dotenv>=1.0.0
+yt-dlp>=2023.12.22
 boto3~=1.37.23
 flask
 flask-cors~=4.0.0
+mir_eval
+resampy
