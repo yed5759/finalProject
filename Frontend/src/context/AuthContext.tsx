@@ -3,7 +3,7 @@
 'use client';
 
 // @ts-ignore
-import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { isAuthenticated, exchangeCodeForToken } from '@/utils/cognito';
 
@@ -27,9 +27,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [authState, setAuthState] = useState<boolean>(false);
     const [loading, setLoading] = useState<boolean>(true);
     const searchParams = useSearchParams();
+    const usedCodeRef = useRef<string | null>(null);
 
     const checkAuth = async (code?: string) => {
         setLoading(true);
+
+        if (usedCodeRef.current === code) {
+            console.log('Code already used, skipping fetch');
+            setLoading(false);
+            return;
+        }
+
+        usedCodeRef.current = code || null;
 
         if (isAuthenticated()) {
             setAuthState(true);
@@ -37,7 +46,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const success = await exchangeCodeForToken(code);
             setAuthState(success);
         } else {
-            setAuthState(false);
+            setAuthState(isAuthenticated());
         }
 
         setLoading(false);
@@ -45,8 +54,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     useEffect(() => {
         const code = searchParams.get('code');
-        checkAuth(code || undefined)
+        if (code) {
+            checkAuth(code);
+        } else {
+            checkAuth();
+        }
     }, [searchParams]);
+
+    if (loading) {
+        return null;
+    }
 
     return (
         <AuthContext.Provider value={{ isAuthenticated: authState, loading, checkAuth }}>
