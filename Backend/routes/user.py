@@ -25,7 +25,7 @@ def get_me():
     user, error = get_user_from_request()
     if error:
         return jsonify({"error": error}), 401
-        db = get_db()
+    db = get_db()
     if db is None:
         return jsonify({"error": "Database unavailable"}), 503
 
