@@ -44,15 +44,16 @@ def create_notes():
         filepath = os.path.join(save_dir, title)
         content.save(filepath)
 
-    audio, sr = sf.read(filepath, dtype='float32')
-
-    if audio.ndim > 1:
-        audio = librosa.to_mono(audio.T)
-
+    audio, sr = sf.read(filepath, always_2d=False)  # mono -> (N,), stereo -> (N, 2)
+    if audio.ndim == 2:          # (N, C)
+        audio = audio.mean(axis=1)  # mix to mono
+    audio = audio.astype(np.float32)
     if sr != SAMPLE_RATE:
+        if audio.shape[0] < 64:
+            return jsonify({'error': 'clip_too_short'}), 400
         audio = resampy.resample(audio, sr, SAMPLE_RATE, filter="kaiser_fast")
         sr = SAMPLE_RATE
-
+    
     audio_tensor = torch.tensor(audio, dtype=torch.float32).unsqueeze(0).to(device)
 
     mel_spectrogram = melspectrogram(audio_tensor)
@@ -64,7 +65,6 @@ def create_notes():
     pitches, intervals, velocities = extract_notes(
         onset_pred[0], frame_pred[0], velocity_pred[0]
     )
-
     y, sr = librosa.load(filepath)
     tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
 
@@ -123,6 +123,7 @@ def create_notes():
             "keys" : [midi_to_vexflow_key(p) for p in note["pitches"]],
             "duration": seconds_to_duration(note["duration"], bpm=tempo)
         })
+    print(vexflow_notes)
     os.remove(filepath)
     return jsonify({'redirect': f'/Notes?songName={title}',
                     'notes': vexflow_notes}), 200

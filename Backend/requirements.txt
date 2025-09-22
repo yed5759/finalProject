@@ -8,3 +8,8 @@ flask
 flask-cors~=4.0.0
 mir_eval
 resampy
+librosa
+torch
+tqdm
+mido
+Pillow
