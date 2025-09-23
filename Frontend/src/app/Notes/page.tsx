@@ -2,24 +2,31 @@
 
 'use client';
 
-import {Formatter, Renderer, Stave, StaveNote, Voice} from 'vexflow';
+import { Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow';
 import '../../styles/Notes.css'
 import CustomModal from '../../components/modal'
-import {useEffect, useRef, useState} from "react";
-import {useRouter, useSearchParams} from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import DownloadDropdown from "../../components/dropdownSelect";
 
 
 export default function Notes() {
     const vfRef = useRef<HTMLDivElement>(null);
-    const [notes, setNotes] = useState<{ keys: string[]; duration: string }[]>([]);
+
+    type NoteData = {
+        keys: string[];
+        duration: string | { duration: string; triplet?: boolean };
+    };
+
+    const [notes, setNotes] = useState<NoteData[]>([]);
+
     const searchParams = useSearchParams();
     const songName = searchParams.get("songName");
     const router = useRouter();
 
     useEffect(() => {
         if (songName != null) {
-            const storedNotes = localStorage.getItem(`notes-${songName}`);
+            const storedNotes = localStorage.getItem(`notes-${encodeURIComponent(songName)}`);
             if (storedNotes) {
                 setNotes(JSON.parse(storedNotes));
             } else {
@@ -41,9 +48,21 @@ export default function Notes() {
             );
         }).map(note => {
             try {
+                const duration =
+                    typeof note.duration === "string"
+                        ? note.duration
+                        : note.duration.duration;
+
+                console.log("Creating note with:", {
+                    keys: note.keys,
+                    rawDuration: note.duration,
+                    parsedDuration: duration
+                });
+
+
                 return new StaveNote({
                     keys: note.keys,
-                    duration: note.duration,
+                    duration: duration,
                 });
             } catch (e) {
                 console.warn("Invalid note skipped:", note, e);
@@ -75,7 +94,7 @@ export default function Notes() {
 
         let y = -20;
 
-// --- ציור ---
+        // --- ציור ---
         systems.forEach((system, index) => {
             const stave = new Stave(10, y, 1400);
             stave.addClef('treble').addTimeSignature('4/4').setContext(ctx).draw();
@@ -158,7 +177,7 @@ export default function Notes() {
     // @ts-ignore
     return (
         <div className="container d-flex flex-column justify-content-start align-items-center text-center"
-             style={{height: '100vh', overflow: 'hidden'}}>
+            style={{ height: '100vh', overflow: 'hidden' }}>
             {!songName
                 ? <div className="title">Taking Notes!</div>
                 : <div className="title">{songName}</div>
@@ -166,30 +185,46 @@ export default function Notes() {
             <div className="underline"></div>
 
             <div className="d-flex gap-3 mt-3">
-                <button type="button" className="btn" style={{width: '10pc', background: "#d59efb"}}
-                        data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save Notes
+                <button type="button" className="btn" style={{ width: '10pc', background: "#d59efb" }}
+                    data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save Notes
                 </button>
-                <button className="btn" style={{width: '10pc', background: "#5ac9d6"}}>Edit Notes</button>
-                <DownloadDropdown vfRef={vfRef} notes={notes}/>
+                <button className="btn" style={{ width: '10pc', background: "#5ac9d6" }}>Edit Notes</button>
+
+                <DownloadDropdown vfRef={vfRef as React.RefObject<HTMLDivElement>} notes={notes} />
             </div>
             <div
                 className="w-100 mt-4"
                 style={{
                     flexGrow: 1,
                     overflowY: 'auto',
-                    maxHeight: 'calc(100vh - 320px)',
+                    maxHeight: 'calc(100vh - 600px)',
                     padding: '0',
                     scrollbarWidth: 'none', // Firefox
                     msOverflowStyle: 'none'
                 }}>
-                <div ref={vfRef} style={{width: '100%'}}/>
+                <div ref={vfRef} style={{ width: '100%' }} />
             </div>
-            <CustomModal notes={notes}/>
+            <CustomModal notes={notes.map(n => ({
+                keys: n.keys,
+                duration: typeof n.duration === "string" ? n.duration : n.duration.duration
+            }))} />
             <div className="container-md justify-content-start mt-3">
                 <div className="d-grid gap-2 col-6 mx-1">
-                    <button type="button" className="btn btn-light rounded-0 btn-outline-dark"
-                            style={{backgroundColor: "lightgray", color: "black"}}
-                            onClick={handleBack}> back
+                    <button
+                        type="button"
+                        className="btn btn-light rounded-0 btn-outline-dark"
+                        style={{
+                            position: 'fixed',
+                            bottom: '30px',
+                            left: '80px',
+                            width: '15ch',
+                            backgroundColor: 'lightgray',
+                            color: 'black',
+                            zIndex: 1000
+                        }}
+                        onClick={handleBack}
+                    >
+                        Back
                     </button>
                 </div>
             </div>

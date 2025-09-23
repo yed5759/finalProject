@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import jsPDF from "jspdf";
 // @ts-ignore
 import canvg from "canvg";
-import {Midi} from "@tonejs/midi"
+import { Midi } from "@tonejs/midi"
 
 
 type Props = {
@@ -100,7 +100,7 @@ export default function DownloadDropdown({ vfRef, notes }: Props) {
             <button
                 type="button"
                 className="btn"
-                style={{ width: "10pc", background: "#59cf59"}}
+                style={{ width: "10pc", background: "#59cf59" }}
                 onClick={handleDownload}
             >
                 Download {selected}
@@ -110,7 +110,7 @@ export default function DownloadDropdown({ vfRef, notes }: Props) {
             <button
                 type="button"
                 className="btn dropdown-toggle dropdown-toggle-split"
-                style={{ background: "#59cf59"}}
+                style={{ background: "#59cf59" }}
                 data-bs-toggle="dropdown"
                 aria-expanded="false"
             >
@@ -119,7 +119,7 @@ export default function DownloadDropdown({ vfRef, notes }: Props) {
 
             {/* Dropdown options */}
             <ul className="dropdown-menu">
-                {["(None)" ,"pdf", "midi"].map((opt) => (
+                {["(None)", "pdf", "midi"].map((opt) => (
                     <li key={opt}>
                         <button
                             className="dropdown-item"

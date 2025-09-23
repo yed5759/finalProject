@@ -13,6 +13,7 @@ import librosa
 import os
 import uuid
 import resampy
+from urllib.parse import quote
 
 home_routes = Blueprint("home", __name__)
 CHORD_TOLERANCE = 0.03  # 30ms
@@ -123,7 +124,6 @@ def create_notes():
             "keys" : [midi_to_vexflow_key(p) for p in note["pitches"]],
             "duration": seconds_to_duration(note["duration"], bpm=tempo)
         })
-    print(vexflow_notes)
     os.remove(filepath)
-    return jsonify({'redirect': f'/Notes?songName={title}',
+    return jsonify({'redirect': f'/Notes?songName={quote(title)}',
                     'notes': vexflow_notes}), 200

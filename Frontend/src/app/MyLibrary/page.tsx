@@ -2,9 +2,9 @@
 
 "use client";
 
-import React, {useState, useEffect} from 'react';
-import {MdDelete, MdShare} from 'react-icons/md';
-import {useRouter} from "next/navigation";
+import React, { useState, useEffect } from 'react';
+import { MdDelete, MdShare } from 'react-icons/md';
+import { useRouter } from "next/navigation";
 
 type Song = {
     id: string;
@@ -96,11 +96,11 @@ export default function MyLibrary() {
 
     useEffect(() => {
         // Get list of songs
-        fetchSongs().then(() => {});
+        fetchSongs().then(() => { });
         // Listener to song-added event
         bc.onmessage = (event) => {
             if (event.data?.type === "song-added") {
-                fetchSongs().then(() => {}); // Refresh list of songs
+                fetchSongs().then(() => { }); // Refresh list of songs
             }
         };
 
@@ -113,14 +113,15 @@ export default function MyLibrary() {
         <div className="container d-flex flex-column justify-content-start align-items-start text-start">
             <h2>My Library</h2>
             <input className="form-control"
-                   type="text"
-                   placeholder="Search for song, artist, or tag"
-                   value={searchQuery}
-                   onChange={(e) => setSearchQuery(e.target.value)}/>
+                type="text"
+                placeholder="Search for song, artist, or tag"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)} />
             <div className="w-50"
-                 style={{
-                     maxHeight: '500px',
-                     overflowY: 'scroll'}}>
+                style={{
+                    maxHeight: '500px',
+                    overflowY: 'scroll'
+                }}>
                 <div className="list-group list-group-numbered">
                     {filteredSongs.map((song, index) => (
                         <div
@@ -129,20 +130,21 @@ export default function MyLibrary() {
                                 padding: '10px',
                                 borderBottom: index !== filteredSongs.length - 1 ? '1px solid black' : 'none',
                                 backgroundColor: 'seashell',
-                                cursor: "pointer",}}
+                                cursor: "pointer",
+                            }}
                             className="list-group-item list-group-item-action d-flex"
                             key={song.id} onClick={() => getSong(song.id, song.title)}
                         >
                             <div className="flex-fill">
-                                <h5 style={{marginBottom: '0px'}} className="ps-3"><strong>{song.title}</strong></h5>
+                                <h5 style={{ marginBottom: '0px' }} className="ps-3"><strong>{song.title}</strong></h5>
                                 {song.artist && (
-                                    <p style={{marginBottom: '0px'}} className="ps-3">
+                                    <p style={{ marginBottom: '0px' }} className="ps-3">
                                         <strong>Artist:</strong> {song.artist}</p>
                                 )}
 
                                 {/* Display tags only if there are tags */}
                                 {song.tags && song.tags.length > 0 && (
-                                    <p style={{marginBottom: '0px'}} className="ps-3">
+                                    <p style={{ marginBottom: '0px' }} className="ps-3">
                                         {song.tags}
                                         <strong>Tags:</strong> {song.tags.join(', ')}
                                     </p>
@@ -161,7 +163,7 @@ export default function MyLibrary() {
                                         fontSize: '20px',
                                     }}
                                     title="Delete">
-                                    <MdDelete/>
+                                    <MdDelete />
                                 </button>
                                 {/* Share icon button */}
                                 <button
@@ -174,7 +176,7 @@ export default function MyLibrary() {
                                         fontSize: '20px',
                                     }}
                                     title="Share">
-                                    <MdShare/>
+                                    <MdShare />
                                 </button>
                             </div>
                             {/* Display artist only if available */}

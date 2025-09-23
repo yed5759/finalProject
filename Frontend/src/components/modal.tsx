@@ -1,6 +1,6 @@
 'use client';
 
-import React, {useEffect, useRef} from 'react';
+import React, { useEffect, useRef } from 'react';
 
 const bc = new BroadcastChannel("songs");
 
@@ -10,7 +10,7 @@ type CustomModalProps = {
     notes: Note[];
 };
 
-export default function CustomModal({notes}: CustomModalProps) {
+export default function CustomModal({ notes }: CustomModalProps) {
     const formRef = useRef<HTMLFormElement>(null);
     const modalRef = useRef<HTMLElement | null>(null);
     const ModalClassRef = useRef<any>(null)
@@ -80,7 +80,7 @@ export default function CustomModal({notes}: CustomModalProps) {
 
     return (
         <div className="modal fade"
-             style={{marginTop: "200px"}}
+            style={{ marginTop: "200px" }}
             id="staticBackdrop"
             data-bs-backdrop="static"
             data-bs-keyboard="false"
@@ -97,12 +97,12 @@ export default function CustomModal({notes}: CustomModalProps) {
                     <div className="modal-body">
                         <label htmlFor="songName" className="form-label text-start w-100">Enter song name:</label>
                         <input name="songName" className="form-control form-control-sm" id="songName" type="text"
-                               placeholder="there is no song in ba-sing-se"
-                               aria-label=".form-control-sm example" required/>
+                            placeholder="there is no song in ba-sing-se"
+                            aria-label=".form-control-sm example" required />
                         <label htmlFor="artist" className="form-label text-start w-100 mt-1">Artist name:</label>
                         <input name="artist" className="form-control form-control-sm" id="artist" type="text"
-                               placeholder="mr piano..."
-                               aria-label=".form-control-sm example"/>
+                            placeholder="mr piano..."
+                            aria-label=".form-control-sm example" />
                     </div>
                     <div className="modal-footer">
                         <button type="button" className="btn btn-danger" data-bs-dismiss="modal">cancel</button>

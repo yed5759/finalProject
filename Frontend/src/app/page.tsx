@@ -14,7 +14,7 @@ export function NavigationTracker() {
   useEffect(() => {
     if (typeof window !== "undefined" && pathname) {
       const fullPath =
-          pathname + (searchParams?.toString() ? `?${searchParams}` : "");
+        pathname + (searchParams?.toString() ? `?${searchParams}` : "");
       const stack = JSON.parse(sessionStorage.getItem("navStack") || "[]");
 
       // push only if it's not the same as the last entry

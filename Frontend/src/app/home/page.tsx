@@ -3,7 +3,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import {useRouter} from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -47,7 +47,8 @@ export default function HomePage() {
       })
       if (response.ok) {
         const data = await response.json();
-        localStorage.setItem(`notes-${data.redirect.split("=")[1]}`, JSON.stringify(data.notes));
+        const safeKey = encodeURIComponent(data.redirect.split("=")[1]);
+        localStorage.setItem(`notes-${safeKey}`, JSON.stringify(data.notes));
         router.push(data.redirect)
       } else {
         const text = await response.text();
@@ -90,10 +91,10 @@ export default function HomePage() {
         <div className="btn-group" role="group">
           <button className="" onClick={SmartSubmit}>
             {loading && (
-                <span
-                    className="spinner-border spinner-border-sm me-2"
-                    aria-hidden="true"
-                ></span>
+              <span
+                className="spinner-border spinner-border-sm me-2"
+                aria-hidden="true"
+              ></span>
             )}
             {loading ? "Generating..." : "Generate Notes"}
           </button>
