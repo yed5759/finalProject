@@ -1,3 +1,5 @@
+// src/app/components/modal.tsx
+
 'use client';
 
 import React, { useEffect, useRef } from 'react';
@@ -40,11 +42,17 @@ export default function CustomModal({ notes }: CustomModalProps) {
         const formData = new FormData(form);
         const songName = formData.get("songName")?.toString().trim();
         const artist = formData.get("artist")?.toString().trim();
+        const tagsInput = formData.get("tags")?.toString().trim();
 
-        if (!songName || !artist) {
-            alert("Please enter both song name and artist name.");
+        if (!songName) {
+            alert("Please enter song name.");
             return;
         }
+
+        // parse tags to array
+        const tags = tagsInput
+            ? tagsInput.split(",").map(tag => tag.trim()).filter(tag => tag.length > 0)
+            : [];
 
         try {
             const res = await fetch("http://localhost:5000/songs", {
@@ -55,7 +63,8 @@ export default function CustomModal({ notes }: CustomModalProps) {
                 },
                 body: JSON.stringify({
                     title: songName,
-                    artist: artist,
+                    artist: artist || null,
+                    tags: tags,
                     notes: notes,
                 }),
             });
@@ -96,13 +105,30 @@ export default function CustomModal({ notes }: CustomModalProps) {
                     </div>
                     <div className="modal-body">
                         <label htmlFor="songName" className="form-label text-start w-100">Enter song name:</label>
-                        <input name="songName" className="form-control form-control-sm" id="songName" type="text"
+                        <input name="songName"
+                            className="form-control form-control-sm"
+                            id="songName" type="text"
                             placeholder="there is no song in ba-sing-se"
-                            aria-label=".form-control-sm example" required />
+                            aria-label=".form-control-sm example"
+                            required
+                        />
                         <label htmlFor="artist" className="form-label text-start w-100 mt-1">Artist name:</label>
-                        <input name="artist" className="form-control form-control-sm" id="artist" type="text"
+                        <input
+                            name="artist"
+                            className="form-control form-control-sm"
+                            id="artist" type="text"
                             placeholder="mr piano..."
-                            aria-label=".form-control-sm example" />
+                            aria-label=".form-control-sm example"
+                        />
+                        <label htmlFor="tags" className="form-label text-start w-100 mt-1">Tags:</label>
+                        <input
+                            name="tags"
+                            className="form-control form-control-sm"
+                            id="tags"
+                            type="text"
+                            placeholder="e.g. piano, jazz, cover"
+                            aria-label=".form-control-sm example"
+                        />
                     </div>
                     <div className="modal-footer">
                         <button type="button" className="btn btn-danger" data-bs-dismiss="modal">cancel</button>

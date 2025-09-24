@@ -1,4 +1,4 @@
-// src/app/AppWrapper.tsx
+// src/app/components/AppWrapper.tsx
 
 'use client';
 
