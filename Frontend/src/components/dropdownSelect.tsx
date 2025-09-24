@@ -85,7 +85,15 @@ export default function DownloadDropdown({ vfRef, notes }: Props) {
         });
 
         const bytes = midi.toArray();
-        const blob = new Blob([bytes], { type: "audio/midi" });
+
+
+        // const blob = new Blob([bytes], { type: "audio/midi" });
+        const arrayBuffer = bytes.buffer instanceof ArrayBuffer
+            ? bytes.buffer
+            : Uint8Array.from(bytes).buffer;
+
+        const blob = new Blob([arrayBuffer], { type: "audio/midi" });
+
         const url = URL.createObjectURL(blob);
 
         const a = document.createElement("a");
