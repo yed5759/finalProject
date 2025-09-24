@@ -118,7 +118,7 @@ export default function MyLibrary() {
                 placeholder="Search for song, artist, or tag"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)} />
-            <div className="w-50"
+            <div className="w-100"
                 style={{
                     maxHeight: '500px',
                     overflowY: 'scroll'
@@ -146,7 +146,6 @@ export default function MyLibrary() {
                                 {/* Display tags only if there are tags */}
                                 {song.tags && song.tags.length > 0 && (
                                     <p style={{ marginBottom: '0px' }} className="ps-3">
-                                        {song.tags}
                                         <strong>Tags:</strong> {song.tags.join(', ')}
                                     </p>
                                 )}
