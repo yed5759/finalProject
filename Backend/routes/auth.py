@@ -32,6 +32,7 @@ def auth_callback():
         return jsonify({
             "id_token": tokens["id_token"],
             "access_token": tokens["access_token"],
+            "refresh_token": tokens.get("refresh_token") 
         })
 
     except Exception as e:

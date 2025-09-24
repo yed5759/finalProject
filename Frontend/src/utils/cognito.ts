@@ -41,6 +41,9 @@ export const exchangeCodeForToken = async (code: string): Promise<boolean> => {
     // Save the tokens in localStorage
     localStorage.setItem("id_token", data.id_token);
     localStorage.setItem("access_token", data.access_token);
+    if (data.refresh_token) {
+      localStorage.setItem("refresh_token", data.refresh_token);
+    }
 
     // Dispatch event to notify token change (after login)
     dispatchTokenChange();
@@ -56,10 +59,67 @@ export const exchangeCodeForToken = async (code: string): Promise<boolean> => {
 export const logout = (): void => {
   localStorage.removeItem("access_token");
   localStorage.removeItem("id_token");
+  localStorage.removeItem("refresh_token");
 
   // Dispatch event to notify token change (after logout)
   dispatchTokenChange();
 
   // Redirect to landing page
   window.location.href = "/landing";
+};
+
+export const refreshToken = async (): Promise<string> => {
+  try {
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (!refreshToken) throw new Error("No refresh token available");
+
+    const res = await fetch("http://localhost:5000/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!res.ok) throw new Error("Failed to refresh token");
+
+    const data = await res.json();
+
+    localStorage.setItem("id_token", data.id_token);
+    if (data.access_token) localStorage.setItem("access_token", data.access_token);
+
+    dispatchTokenChange();
+
+    return data.id_token;
+  } catch (err) {
+    console.error("Refresh token error:", err);
+    logout();
+    throw err;
+  }
+};
+
+export const fetchWithRefresh = async (input: RequestInfo, init?: RequestInit) => {
+  let res = await fetch(input, init);
+
+  if (res.status === 401) {
+    try {
+      // Try to refresh the token
+      const newIdToken = await refreshToken();
+
+      // Update the headers with the new id_token
+      const newInit = {
+        ...init,
+        headers: {
+          ...init?.headers,
+          Authorization: `Bearer ${newIdToken}`,
+        },
+      };
+
+      // Retry the request
+      res = await fetch(input, newInit);
+    } catch (err) {
+      // If the refresh attempt also fails, throw an error
+      throw err;
+    }
+  }
+
+  return res;
 };

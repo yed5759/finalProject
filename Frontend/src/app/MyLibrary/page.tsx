@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { MdDelete, MdShare } from 'react-icons/md';
 import { useRouter } from "next/navigation";
+import { fetchWithRefresh } from '../../utils/cognito';
 
 type Song = {
     id: string;
@@ -78,7 +79,7 @@ export default function MyLibrary() {
     // ✅ הפונקציה לשליפת שירים (חשוב שתהיה נפרדת כדי שנוכל לקרוא לה מאירועים)
     const fetchSongs = async () => {
         try {
-            const res = await fetch("http://localhost:5000/songs", {
+            const res = await fetchWithRefresh("http://localhost:5000/songs", {
                 headers: {
                     Authorization: `Bearer ${localStorage.getItem("id_token")}`,
                 },
@@ -90,7 +91,7 @@ export default function MyLibrary() {
             }
         } catch (error) {
             console.error("Error fetching songs:", error);
-            alert("שגיאה בטעינת רשימת השירים");
+            alert("Error fetching songs");
         }
     };
 
