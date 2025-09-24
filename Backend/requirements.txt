@@ -13,3 +13,5 @@ torch
 tqdm
 mido
 Pillow
+soundfile
+numpy
