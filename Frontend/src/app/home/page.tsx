@@ -4,6 +4,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from "next/navigation";
+import { fetchWithRefresh } from '@/utils/cognito';
 
 export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -41,10 +42,10 @@ export default function HomePage() {
       return
     }
     try {
-      const response = await fetch(api, {
+      const response = await fetchWithRefresh(api, {
         method: 'POST',
         body: formData,
-      })
+      });
       if (response.ok) {
         const data = await response.json();
         const safeKey = encodeURIComponent(data.redirect.split("=")[1]);

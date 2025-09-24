@@ -34,7 +34,7 @@ export default function MyLibrary() {
 
     async function getSong(id: string, name: string) {
         try {
-            const res = await fetch(`http://localhost:5000/songs/${id}`, {
+            const res = await fetchWithRefresh(`http://localhost:5000/songs/${id}`, {
                 method: "GET",
                 headers: {
                     Authorization: `Bearer ${localStorage.getItem("id_token")}`
@@ -54,7 +54,7 @@ export default function MyLibrary() {
     // Handle deleting a song width given id
     const handleDelete = async (id: string) => {
         try {
-            const res = await fetch(`http://localhost:5000/songs/${id}`, {
+            const res = await fetchWithRefresh(`http://localhost:5000/songs/${id}`, {
                 method: "DELETE",
                 headers: {
                     Authorization: `Bearer ${localStorage.getItem("id_token")}`,

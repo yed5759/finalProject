@@ -3,6 +3,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { fetchWithRefresh } from '@/utils/cognito';
 
 const bc = new BroadcastChannel("songs");
 
@@ -55,12 +56,9 @@ export default function CustomModal({ notes }: CustomModalProps) {
             : [];
 
         try {
-            const res = await fetch("http://localhost:5000/songs", {
+            const res = await fetchWithRefresh("http://localhost:5000/songs", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${localStorage.getItem("id_token")}`,
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     title: songName,
                     artist: artist || null,
