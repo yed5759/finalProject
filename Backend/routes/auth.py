@@ -37,3 +37,17 @@ def auth_callback():
 
     except Exception as e:
         return jsonify({"error": "Failed to process user", "details": str(e)}), 400
+
+@auth_routes.route("/auth/refresh", methods=["POST"])
+def refresh_token():
+    payload = request.get_json()
+    refresh_token = payload.get("refresh_token")
+    if not refresh_token:
+        return jsonify({"error": "No refresh token"}), 400
+    # Implement refresh token validation against Cognito and generate new id_token
+    new_tokens = {
+        "id_token": "...",
+        "access_token": "...",
+        "refresh_token": refresh_token  # or new
+    }
+    return jsonify(new_tokens)

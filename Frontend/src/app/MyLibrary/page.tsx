@@ -45,6 +45,11 @@ export default function MyLibrary() {
                 const notes = data['notes']
                 localStorage.setItem(`notes-${name}`, JSON.stringify(notes))
                 router.push(`/Notes?songName=${name}`)
+            } else if (res.status === 404) {
+                alert("השיר לא נמצא – כנראה נמחק");
+                setSongs(prev => prev.filter(song => song.id !== id)); // עדכון ה־state
+            } else {
+                throw new Error(`Unexpected response: ${res.status}`);
             }
         } catch (error: any) {
             throw new Error(error?.message || "Failed to fetch song")
@@ -52,7 +57,8 @@ export default function MyLibrary() {
     }
 
     // Handle deleting a song width given id
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: string, event: React.MouseEvent) => {
+        event.stopPropagation();
         try {
             const res = await fetchWithRefresh(`http://localhost:5000/songs/${id}`, {
                 method: "DELETE",
@@ -70,11 +76,16 @@ export default function MyLibrary() {
         }
     };
 
-    // Handle sharing a song (this is just a placeholder)
-    const handleShare = (song: Song) => {
-        // For now, just alert the song title and artist
-        alert(`Sharing song: ${song.title}`);
+    // // Handle sharing a song (this is just a placeholder)
+    // const handleShare = (song: Song) => {
+    //     // For now, just alert the song title and artist
+    //     alert(`Sharing song: ${song.title}`);
+    // };
+
+    const handleEdit = (song: Song) => {
+        router.push(`/edit?songId=${song.id}`);
     };
+
 
     // ✅ הפונקציה לשליפת שירים (חשוב שתהיה נפרדת כדי שנוכל לקרוא לה מאירועים)
     const fetchSongs = async () => {
@@ -154,7 +165,7 @@ export default function MyLibrary() {
                             <div className="d-flex justify-content-end">
                                 {/* Delete icon button */}
                                 <button
-                                    onClick={() => handleDelete(song.id)}
+                                    onClick={(e) => handleDelete(song.id, e)}
                                     style={{
                                         padding: '5px',
                                         backgroundColor: 'transparent',
@@ -163,10 +174,11 @@ export default function MyLibrary() {
                                         fontSize: '20px',
                                     }}
                                     title="Delete">
-                                    <MdDelete />
+                                    🗑️
                                 </button>
+                                {/* todo delete */}
                                 {/* Share icon button */}
-                                <button
+                                {/* <button
                                     onClick={() => handleShare(song)}
                                     style={{
                                         padding: '5px',
@@ -177,6 +189,18 @@ export default function MyLibrary() {
                                     }}
                                     title="Share">
                                     <MdShare />
+                                </button> */}
+                                <button
+                                    onClick={() => handleEdit(song)}
+                                    style={{
+                                        padding: '5px',
+                                        backgroundColor: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '20px',
+                                    }}
+                                    title="Edit">
+                                    ✏️
                                 </button>
                             </div>
                             {/* Display artist only if available */}

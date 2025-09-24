@@ -73,7 +73,7 @@ export const refreshToken = async (): Promise<string> => {
     const refreshToken = localStorage.getItem("refresh_token");
     if (!refreshToken) throw new Error("No refresh token available");
 
-    const res = await fetchWithRefresh("http://localhost:5000/auth/refresh", {
+    const res = await fetch("http://localhost:5000/auth/refresh", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
@@ -97,26 +97,20 @@ export const refreshToken = async (): Promise<string> => {
 };
 
 export const fetchWithRefresh = async (input: RequestInfo, init?: RequestInit) => {
-  let res = await fetch(input, init);
+  // Ensure headers exist and include id_token
+  const headers = {
+    ...(init?.headers || {}),
+    Authorization: `Bearer ${localStorage.getItem("id_token")}`,
+  };
+
+  let res = await fetch(input, { ...init, headers });
 
   if (res.status === 401) {
     try {
-      // Try to refresh the token
       const newIdToken = await refreshToken();
-
-      // Update the headers with the new id_token
-      const newInit = {
-        ...init,
-        headers: {
-          ...init?.headers,
-          Authorization: `Bearer ${newIdToken}`,
-        },
-      };
-
-      // Retry the request
-      res = await fetch(input, newInit);
+      // Retry with new token
+      res = await fetch(input, { ...init, headers: { ...headers, Authorization: `Bearer ${newIdToken}` } });
     } catch (err) {
-      // If the refresh attempt also fails, throw an error
       throw err;
     }
   }
