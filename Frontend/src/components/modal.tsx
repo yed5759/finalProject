@@ -71,6 +71,9 @@ export default function CustomModal({ notes }: CustomModalProps) {
                 throw new Error("Failed to add test song");
 
             bc.postMessage({ type: "song-added" });
+
+            localStorage.setItem(`notes-${encodeURIComponent(songName)}`, JSON.stringify(notes));
+            alert("שיר נוסף בהצלחה!");
         } catch (error) {
             alert("שגיאה בהוספת שיר: " + (error instanceof Error ? error.message : ""));
         }

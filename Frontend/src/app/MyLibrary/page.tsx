@@ -90,6 +90,11 @@ export default function MyLibrary() {
     // ✅ הפונקציה לשליפת שירים (חשוב שתהיה נפרדת כדי שנוכל לקרוא לה מאירועים)
     const fetchSongs = async () => {
         try {
+
+            console.log("Access Token:", localStorage.getItem("accessToken"));
+            console.log("ID Token:", localStorage.getItem("id_token"));
+            console.log("Refresh Token:", localStorage.getItem("refreshToken"));
+
             const res = await fetchWithRefresh("http://localhost:5000/songs", {
                 headers: {
                     Authorization: `Bearer ${localStorage.getItem("id_token")}`,
