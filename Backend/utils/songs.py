@@ -43,12 +43,20 @@ def delete_song_from_user(user_id, song_id):
 # Update a song by its UUID within user's songs
 def update_song_for_user(user_id, song_id, updated_data):
     db = get_db()
+    # Ensure name exists
+    if "title" not in updated_data or not updated_data["title"]:
+        raise ValueError("Song title is required")
+    # Convert missing optional fields to default values
+    updated_data.setdefault("artist", None)
+    updated_data.setdefault("tags", [])
+    updated_data.setdefault("notes", [])
+
     update_query = {f"songs.$.{key}": value for key, value in updated_data.items()}
     result = db.users.update_one(
         {"_id": user_id, "songs.id": song_id},
         {"$set": update_query}
     )
-    if result.modified_count == 0:
+    if result.matched_count == 0:
         raise ValueError("Song or user not found")
 
 # Get a specific song by its UUID from user's songs

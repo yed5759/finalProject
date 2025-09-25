@@ -53,7 +53,7 @@ def add_song():
 
 # PUT /songs/<song_id>
 
-@songs_routes.route("/songs/<song_id>", methods=["PUT"])
+@songs_routes.route("/songs/<song_id>", methods=["PUT", "PATCH"])
 def update_song(song_id):
     user, error = get_user_from_request()
     if error:

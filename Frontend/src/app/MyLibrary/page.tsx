@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { MdDelete, MdShare } from 'react-icons/md';
+import { MdDelete, MdShare, MdEdit } from 'react-icons/md';
 import { useRouter } from "next/navigation";
 import { fetchWithRefresh } from '../../utils/cognito';
 
@@ -22,6 +22,9 @@ export default function MyLibrary() {
     const [songs, setSongs] = useState<Song[]>([]);
     // State for search query
     const [searchQuery, setSearchQuery] = useState('');
+    // State for inline editing
+    const [editingSongId, setEditingSongId] = useState<string | null>(null);
+    const [editingValues, setEditingValues] = useState<{ title: string; artist?: string; tags?: string[]; newTag?: string }>({ title: '', artist: '', tags: [], newTag: '' });
     const router = useRouter();
 
     // Filter songs based on search query
@@ -82,10 +85,67 @@ export default function MyLibrary() {
     //     alert(`Sharing song: ${song.title}`);
     // };
 
+    // Handle inline editing
     const handleEdit = (song: Song) => {
-        router.push(`/edit?songId=${song.id}`);
+        setEditingSongId(song.id);
+        setEditingValues({
+            title: song.title,
+            artist: song.artist || '',
+            tags: song.tags || [],
+        });
     };
 
+    const handleChange = (field: keyof typeof editingValues, value: string) => {
+        setEditingValues(prev => ({
+            ...prev,
+            [field]: field === "tags" ? value.split(",").map(t => t.trim()).filter(t => t) : value
+        }));
+    };
+    const addTag = () => {
+        const tag = (editingValues.newTag || '').trim();
+        if (tag) {
+            setEditingValues(prev => ({ ...prev, tags: [...(prev.tags || []), tag], newTag: '' }));
+        }
+    };
+
+    const handleSaveEdit = async (songId: string) => {
+        try {
+            const oldSong = songs.find(s => s.id === songId);
+            if (!oldSong) return;
+
+            const res = await fetchWithRefresh(`http://localhost:5000/songs/${songId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${localStorage.getItem("id_token")}`,
+                },
+                body: JSON.stringify({
+                    title: editingValues.title,
+                    artist: editingValues.artist,
+                    tags: editingValues.tags,
+                }),
+            });
+
+            if (!res.ok) throw new Error("Failed to update song");
+
+            // Update notes key if title changed
+            if (oldSong.title !== editingValues.title) {
+                const oldKey = `notes-${encodeURIComponent(oldSong.title)}`;
+                const newKey = `notes-${encodeURIComponent(editingValues.title)}`;
+                const notes = localStorage.getItem(oldKey);
+                if (notes) {
+                    localStorage.setItem(newKey, notes);
+                    // optional: remove old key
+                    // localStorage.removeItem(oldKey);
+                }
+            }
+
+            setSongs(prev => prev.map(s => s.id === songId ? { ...s, ...editingValues } : s));
+            setEditingSongId(null);
+        } catch (error: any) {
+            alert("שגיאה בעדכון השיר: " + (error?.message || ""));
+        }
+    };
 
     // ✅ הפונקציה לשליפת שירים (חשוב שתהיה נפרדת כדי שנוכל לקרוא לה מאירועים)
     const fetchSongs = async () => {
@@ -150,22 +210,72 @@ export default function MyLibrary() {
                                 cursor: "pointer",
                             }}
                             className="list-group-item list-group-item-action d-flex"
-                            key={song.id} onClick={() => getSong(song.id, song.title)}
+                            key={song.id} onClick={() => { if (editingSongId !== song.id) getSong(song.id, song.title); }}
                         >
-                            <div className="flex-fill">
-                                <h5 style={{ marginBottom: '0px' }} className="ps-3"><strong>{song.title}</strong></h5>
-                                {song.artist && (
-                                    <p style={{ marginBottom: '0px' }} className="ps-3">
-                                        <strong>Artist:</strong> {song.artist}</p>
-                                )}
+                            {editingSongId === song.id ? (
+                                <div className="flex-fill ps-3 d-flex flex-column gap-2">
+                                    <div className="ps-3 mb-2">
+                                        <label><strong>Title:</strong></label>
+                                        <input type="text"
+                                            className="form-control"
+                                            value={editingValues.title}
+                                            onChange={e => handleChange("title", e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(song.id); }}
+                                        />
+                                    </div>
+                                    <div className="ps-3 mb-2">
+                                        <label><strong>Artist:</strong></label>
+                                        <input type="text"
+                                            className="form-control"
+                                            value={editingValues.artist}
+                                            onChange={e => handleChange("artist", e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(song.id); }}
+                                        />
+                                    </div>
+                                    <div className="ps-3 mb-2 d-flex flex-column gap-1">
+                                        <label><strong>Tags:</strong></label>
+                                        <div className="d-flex gap-2">
+                                            <input type="text"
+                                                className="form-control"
+                                                placeholder="Add tag"
+                                                value={editingValues.newTag || ''}
+                                                onChange={e => setEditingValues(prev => ({ ...prev, newTag: e.target.value }))}
+                                                onKeyDown={e => { if (e.key === 'Enter') { addTag(); e.preventDefault(); } }}
+                                            />
+                                            <button type="button" onClick={(e) => { e.stopPropagation(); addTag(); }} style={{ padding: '0 4px', cursor: 'pointer' }}>➕</button>
+                                        </div>
+                                        <div>
+                                            {(editingValues.tags || []).map((tag, i) => (
+                                                <span key={i} style={{ marginRight: '5px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                                                    #{tag}
+                                                    <button type="button" onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEditingValues(prev => ({ ...prev, tags: prev.tags?.filter((_, idx) => idx !== i) }));
+                                                    }} style={{ padding: '0 4px', cursor: 'pointer' }}>➖</button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="d-flex gap-2">
+                                        <button onClick={(e) => { e.stopPropagation(); handleSaveEdit(song.id); }}>✔️</button>
+                                        <button onClick={(e) => { e.stopPropagation(); setEditingSongId(null); }}>❌</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex-fill">
 
-                                {/* Display tags only if there are tags */}
-                                {song.tags && song.tags.length > 0 && (
-                                    <p style={{ marginBottom: '0px' }} className="ps-3">
-                                        <strong>Tags:</strong> {song.tags.join(', ')}
-                                    </p>
-                                )}
-                            </div>
+                                    <h5 style={{ marginBottom: '0px' }} className="ps-3"><strong>{song.title}</strong></h5>
+                                    {song.artist && (
+                                        <p style={{ marginBottom: '0px' }} className="ps-3">
+                                            <strong>Artist:</strong> {song.artist}</p>
+                                    )}
+                                    {song.tags && song.tags.length > 0 && (
+                                        <p style={{ marginBottom: '0px' }} className="ps-3">
+                                            <strong>Tags:</strong> {song.tags.join(', ')}</p>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Buttons container */}
                             <div className="d-flex justify-content-end">
                                 {/* Delete icon button */}
@@ -179,7 +289,7 @@ export default function MyLibrary() {
                                         fontSize: '20px',
                                     }}
                                     title="Delete">
-                                    🗑️
+                                    <MdDelete></MdDelete>
                                 </button>
                                 {/* todo delete */}
                                 {/* Share icon button */}
@@ -196,7 +306,7 @@ export default function MyLibrary() {
                                     <MdShare />
                                 </button> */}
                                 <button
-                                    onClick={() => handleEdit(song)}
+                                    onClick={(e) => { e.stopPropagation(); handleEdit(song); }}
                                     style={{
                                         padding: '5px',
                                         backgroundColor: 'transparent',
@@ -205,7 +315,7 @@ export default function MyLibrary() {
                                         fontSize: '20px',
                                     }}
                                     title="Edit">
-                                    ✏️
+                                    <MdEdit></MdEdit>
                                 </button>
                             </div>
                             {/* Display artist only if available */}
