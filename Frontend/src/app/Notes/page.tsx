@@ -244,6 +244,72 @@ export default function Notes() {
         setEditOpen(true);
     };
 
+    function durationToSeconds(duration: string, bpm: number): number {
+        const quarter = 60 / bpm;
+        switch (duration) {
+            case "w": return 4 * quarter;   // whole note
+            case "h": return 2 * quarter;   // half note
+            case "q": return quarter;       // quarter note
+            case "8": return quarter / 2;   // eighth note
+            case "16": return quarter / 4;  // sixteenth note
+            default: return quarter;        // default to quarter
+        }
+    }
+
+    const playNotes = () => {
+        if (!notes.length) return;
+
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        let currentTime = audioCtx.currentTime;
+
+        notes.forEach(note => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.type = "sine"; // can be "square", "triangle", "sawtooth"
+            osc.frequency.value = noteToFrequency(note.keys[0].replace("/", ""));
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const dur = durationToSeconds(note.duration, bpm);
+            osc.start(currentTime);
+            osc.stop(currentTime + dur);
+
+            currentTime += dur;
+        });
+    };
+
+    function noteToFrequency(note: string): number {
+        // note is like "c4", "d#5", etc.
+        const A4 = 440;
+        const SEMITONES: Record<string, number> = {
+            c: -9,
+            "c#": -8,
+            d: -7,
+            "d#": -6,
+            e: -5,
+            f: -4,
+            "f#": -3,
+            g: -2,
+            "g#": -1,
+            a: 0,
+            "a#": 1,
+            b: 2,
+        };
+
+        // regex: letter + optional sharp + octave
+        const match = note.toLowerCase().match(/^([a-g]#?)(\d)$/);
+        if (!match) return A4;
+
+        const [, pitch, octaveStr] = match;
+        const octave = parseInt(octaveStr, 10);
+
+        // distance from A4 in semitones
+        const semitoneOffset = SEMITONES[pitch] + (octave - 4) * 12;
+
+        return A4 * Math.pow(2, semitoneOffset / 12);
+    }
+
 
     // @ts-ignore
     return (
@@ -265,6 +331,13 @@ export default function Notes() {
                         background: "#5ac9d6"
                     }}
                     onClick={openEditor}>Edit Notes</button>
+                <button
+                    className="btn"
+                    style={{ width: '10pc', background: "#90ee90" }}
+                    onClick={playNotes}
+                >
+                    ▶ Play
+                </button>
                 <DownloadDropdown vfRef={vfRef as React.RefObject<HTMLDivElement>} notes={notes} />
             </div>
             <div
