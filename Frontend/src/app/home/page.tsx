@@ -35,7 +35,14 @@ export default function HomePage() {
     if (file) {
       formData.append("file", file);
     } else if (url) {
-      formData.append("url", url);
+      try {
+        new URL(url); // בדיקה אם זה URL תקין
+        formData.append("url", url);
+      } catch {
+        alert("Please enter a valid URL!");
+        setLoading(false);
+        return;
+      }
     } else {
       alert('Please upload a file or enter a URL!');
       setLoading(false);
@@ -83,8 +90,22 @@ export default function HomePage() {
           <h3 className="font-monospace m-3">Upload URL of a song</h3>
           <form className="d-flex flex-column align-items-center mb-3" id="URL-form" autoComplete="off">
             <label htmlFor="url">Please enter the URL for the song you picked:</label>
-            <input type="url" className="form-control w-75" id="url" name="url" autoComplete="off" ref={urlInputRef}
-              placeholder="https://www.youtube.com/watch?v=fake1234abcd" />
+            <input
+              type="url"
+              className="form-control w-75"
+              id="url"
+              name="url"
+              autoComplete="off"
+              ref={urlInputRef}
+              placeholder="https://www.youtube.com/watch?v=fake1234abcd"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  // Create a dummy event with preventDefault to pass
+                  SmartSubmit({ preventDefault: () => { } });
+                }
+              }}
+            />
           </form>
         </div>
       </div>
