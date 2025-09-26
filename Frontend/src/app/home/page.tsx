@@ -55,9 +55,16 @@ export default function HomePage() {
       });
       if (response.ok) {
         const data = await response.json();
+        const title = data.title;
         const safeKey = encodeURIComponent(data.redirect.split("=")[1]);
         localStorage.setItem(`notes-${safeKey}`, JSON.stringify(data.notes));
-        router.push(data.redirect)
+        // Put the fresh model output in sessionStorage (one-shot handoff)
+        sessionStorage.setItem('fresh_title', title);
+        sessionStorage.setItem('fresh_vex', JSON.stringify(data.notes));
+        sessionStorage.setItem('fresh_bpm', String(data.bpm ?? 120));
+
+        // Go to Notes with a hint that we have fresh data
+        router.push(`${data.redirect}&fresh=1`);
       } else {
         const text = await response.text();
         alert("Server error: " + text);

@@ -125,5 +125,10 @@ def create_notes():
             "duration": seconds_to_duration(note["duration"], bpm=tempo)
         })
     os.remove(filepath)
-    return jsonify({'redirect': f'/Notes?songName={quote(title)}',
-                    'notes': vexflow_notes}), 200
+    return jsonify({
+        'redirect': f'/Notes?songName={quote(title)}',
+        # todo check if relevant
+        # 'title': title,                    # ⬅ so the client doesn’t need to parse it
+        'bpm': float(tempo),               # ⬅ tempo from librosa.beat.beat_track
+        'notes': vexflow_notes,
+    }), 200

@@ -46,8 +46,9 @@ export default function MyLibrary() {
             if (res.ok) {
                 const data = await res.json()
                 const notes = data['notes']
+                const id = data['id']
                 localStorage.setItem(`notes-${name}`, JSON.stringify(notes))
-                router.push(`/Notes?songName=${name}`)
+                router.push(`/Notes?songName=${name}&id=${id}`);
             } else if (res.status === 404) {
                 alert("השיר לא נמצא – כנראה נמחק");
                 setSongs(prev => prev.filter(song => song.id !== id)); // עדכון ה־state

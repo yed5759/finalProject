@@ -31,16 +31,10 @@ def seconds_to_duration(seconds: float, bpm: int = 120):
     }
 
     if beats_rounded in duration_map:
-        return {"duration": duration_map[beats_rounded], "triplet": False}
+        return duration_map[beats_rounded]
 
-    # dotted
     for base, symbol in duration_map.items():
         if abs(beats_rounded - 1.5 * base) < 0.1:
-            return {"duration": symbol + "d", "triplet": False}
+            return symbol + "d"
 
-    # triplet
-    for base, symbol in duration_map.items():
-        if abs(beats_rounded - (2/3) * base) < 0.1:
-            return {"duration": symbol, "triplet": True}
-
-    return {"duration": "q", "triplet": False}
+    return "q"
