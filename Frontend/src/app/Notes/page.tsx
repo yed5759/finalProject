@@ -28,6 +28,7 @@ export default function Notes() {
     const [raw, setRaw] = useState<RawNote[]>([]);
     const [bpm, setBpm] = useState<number>(120);
     const [editOpen, setEditOpen] = useState(false);
+    const [vexNoteRefs, setVexNoteRefs] = useState<StaveNote[]>([]);
 
     useEffect(() => {
         if (!titleKey) {
@@ -125,6 +126,7 @@ export default function Notes() {
         let y = -20;
 
         // --- ציור ---
+        const allVexNotes: StaveNote[] = [];
         systems.forEach((system, index) => {
             const stave = new Stave(10, y, 1400);
             stave.addClef('treble').addTimeSignature('4/4').setContext(ctx).draw();
@@ -136,7 +138,9 @@ export default function Notes() {
                 notesInSystem.forEach(note => {
                     note.setStave(stave);
                     note.setContext(ctx);
+                    allVexNotes.push(note);
                 });
+
 
                 try {
                     const voice = new Voice({ numBeats: 16, beatValue: 4 });
@@ -152,6 +156,7 @@ export default function Notes() {
 
             y += STAVE_HEIGHT;
         });
+        setVexNoteRefs(allVexNotes);
     }, [songName, notes]);
 
 
@@ -257,16 +262,21 @@ export default function Notes() {
     }
 
     const playNotes = () => {
-        if (!notes.length) return;
+        if (!notes.length || !vexNoteRefs.length) return;
 
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
         let currentTime = audioCtx.currentTime;
 
-        notes.forEach(note => {
+        notes.forEach((note, index) => {
+            const vexNote = vexNoteRefs[index];
+            if (!vexNote) return;
+
+            vexNote.setStyle({ fillStyle: "red" });
+            vexNote.draw();
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
 
-            osc.type = "sine"; // can be "square", "triangle", "sawtooth"
+            osc.type = "sine";
             osc.frequency.value = noteToFrequency(note.keys[0].replace("/", ""));
             osc.connect(gain);
             gain.connect(audioCtx.destination);
@@ -275,9 +285,15 @@ export default function Notes() {
             osc.start(currentTime);
             osc.stop(currentTime + dur);
 
+            setTimeout(() => {
+                vexNote.setStyle({ fillStyle: "black" });
+                vexNote.draw();
+            }, (currentTime - audioCtx.currentTime + dur) * 1000);
+
             currentTime += dur;
         });
     };
+
 
     function noteToFrequency(note: string): number {
         // note is like "c4", "d#5", etc.
