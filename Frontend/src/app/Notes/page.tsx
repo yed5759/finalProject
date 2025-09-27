@@ -280,10 +280,10 @@ export default function Notes() {
     };
 
     const openEditor = () => {
-        if (!raw.length && notes.length) {
-            const boot = buildRawFromVex(notes, bpm);
-            setRaw(boot);
-            if (titleKey) localStorage.setItem(`raw-${titleKey}`, JSON.stringify(boot));
+        const boot = buildRawFromVex(notes, bpm);
+        setRaw(boot);
+        if (titleKey) {
+            localStorage.setItem(`raw-${titleKey}`, JSON.stringify(boot));
         }
         setEditOpen(true);
     };
