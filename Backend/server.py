@@ -14,10 +14,11 @@ CORS(app, origins = "http://localhost:3000", supports_credentials=True)
 
 # Register auth routes
 app.register_blueprint(auth_routes)
-app.register_blueprint(user_routes)
 app.register_blueprint(songs_routes)
 app.register_blueprint(sharing_routes)
 app.register_blueprint(home_routes)
+app.register_blueprint(user_routes, url_prefix="/user")
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -71,6 +71,17 @@ def delete_song(song_id):
     delete_song_from_user(user["_id"], song_id)
     return jsonify({"message": "Song deleted"})
 
+# GET /songs/public/<owner_id>/<song_id>
+@songs_routes.route("/songs/public/<owner_id>/<song_id>", methods=["GET"])
+def get_song_public(owner_id, song_id):
+    try:
+        song = get_song_by_id(owner_id, song_id)
+        if not song:
+            return jsonify({"error": "Song not found"}), 404
+        return jsonify(song), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # todo delete - POST /songs/add-const
 @songs_routes.route("/songs/add-const", methods=["POST"])
 def add_const():

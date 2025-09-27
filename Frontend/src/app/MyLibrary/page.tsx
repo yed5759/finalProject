@@ -80,11 +80,43 @@ export default function MyLibrary() {
         }
     };
 
-    // // Handle sharing a song (this is just a placeholder)
-    // const handleShare = (song: Song) => {
-    //     // For now, just alert the song title and artist
-    //     alert(`Sharing song: ${song.title}`);
-    // };
+    // Handle sharing a song via public link
+    const handleShare = async (song: Song, e: React.MouseEvent) => {
+        e.stopPropagation();
+
+        try {
+            // Fetch current user's _id from backend
+            const res = await fetchWithRefresh("http://localhost:5000/user/me", {
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem("id_token")}`
+                },
+            });
+
+            if (!res.ok) {
+                alert("Error fetching user info – please login again");
+                return;
+            }
+
+            const data = await res.json();
+            const userId = data._id;
+
+            if (!userId) {
+                alert("User ID not found");
+                return;
+            }
+
+            // Build public share URL
+            const shareUrl = `${window.location.origin}/Notes?owner_id=${userId}&song_id=${song.id}`;
+
+            // Copy to clipboard
+            await navigator.clipboard.writeText(shareUrl);
+            alert("📋 הקישור הועתק ללוח:\n" + shareUrl);
+
+        } catch (error: any) {
+            alert("Failed to generate share link: " + (error?.message || ""));
+        }
+    };
+
 
     // Handle inline editing
     const handleEdit = (song: Song) => {
@@ -294,8 +326,8 @@ export default function MyLibrary() {
                                 </button>
                                 {/* todo delete */}
                                 {/* Share icon button */}
-                                {/* <button
-                                    onClick={() => handleShare(song)}
+                                <button
+                                    onClick={(e) => handleShare(song, e)}
                                     style={{
                                         padding: '5px',
                                         backgroundColor: 'transparent',
@@ -305,7 +337,7 @@ export default function MyLibrary() {
                                     }}
                                     title="Share">
                                     <MdShare />
-                                </button> */}
+                                </button>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); handleEdit(song); }}
                                     style={{

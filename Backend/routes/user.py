@@ -30,18 +30,18 @@ def get_me():
         return jsonify({"error": "Database unavailable"}), 503
 
     users_collection = db["users"]
-    mongo_user = users_collection.find_one({"_id": user["sub"]})
+    mongo_user = users_collection.find_one({"_id": user["_id"]})
     if mongo_user is None:
         # המשתמש לא קיים – נחזיר מבנה ריק עם מידע מה-token בלבד
         return jsonify({
-            "sub": user["sub"],
+            "_id": user["_id"],
             "username": user.get("username", ""),
             "songs": [],
             "shared_songs": []
         })
 
     return jsonify({
-        "sub": mongo_user["_id"],
+        "_id": mongo_user["_id"],
         "username": mongo_user.get("username", user.get("username")),
         "songs": mongo_user.get("songs", []),
         "shared_songs": mongo_user.get("shared_songs", [])

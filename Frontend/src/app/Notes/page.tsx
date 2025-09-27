@@ -22,13 +22,44 @@ export default function Notes() {
     const searchParams = useSearchParams();
     const freshParam = searchParams.get('fresh'); // '1' | null
     const songName = searchParams.get("songName");
-    const id = searchParams.get("id") || null;
+    const id = searchParams.get("song_id") || null;
     const titleKey = songName ? decodeURIComponent(songName) : "";
+    const ownerId = searchParams.get("owner_id") || null;
     const router = useRouter();
     const [raw, setRaw] = useState<RawNote[]>([]);
     const [bpm, setBpm] = useState<number>(120);
     const [editOpen, setEditOpen] = useState(false);
     const [vexNoteRefs, setVexNoteRefs] = useState<StaveNote[]>([]);
+
+    useEffect(() => {
+        if (!ownerId || !id) return;
+
+        async function fetchSharedSong() {
+            try {
+                const res = await fetch(`http://localhost:5000/songs/public/${ownerId}/${id}`);
+                if (!res.ok) throw new Error("Song not found");
+                const data = await res.json();
+
+                const vex = data.notes as VexNote[];
+                const b = data.bpm ?? 120;
+                const title = data.title ?? "Untitled";
+
+                setNotes(vex);
+                const boot = buildRawFromVex(vex, b);
+                setRaw(boot);
+                setBpm(b);
+
+                localStorage.setItem(`notes-${title}`, JSON.stringify(vex));
+                localStorage.setItem(`raw-${title}`, JSON.stringify(boot));
+                localStorage.setItem(`bpm-${title}`, String(b));
+            } catch (err) {
+                console.error(err);
+                alert("Failed to load shared song");
+            }
+        }
+
+        fetchSharedSong();
+    }, [ownerId, id]);
 
     useEffect(() => {
         if (!titleKey) {
