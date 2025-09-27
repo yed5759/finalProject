@@ -44,8 +44,7 @@ def create_notes():
 
         filepath = os.path.join(save_dir, title)
         content.save(filepath)
-
-    audio, sr = sf.read(filepath, always_2d=False)  # mono -> (N,), stereo -> (N, 2)
+    audio, sr = librosa.load(filepath, sr=SAMPLE_RATE, mono=True)  # mono -> (N,), stereo -> (N, 2)
     if audio.ndim == 2:          # (N, C)
         audio = audio.mean(axis=1)  # mix to mono
     audio = audio.astype(np.float32)
