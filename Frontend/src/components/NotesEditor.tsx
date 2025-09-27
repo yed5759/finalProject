@@ -45,24 +45,6 @@ export default function NotesEditor({
                 <div style={{display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12}}>
                     <h3 style={{margin: 0}}>Edit Notes</h3>
                     <div style={{marginLeft: 'auto', display: 'flex', gap: 8}}>
-                        <label>BPM:
-                            <input type="number" value={bpm} min={20} max={300}
-                                   onChange={e => setBpm(Number(e.target.value) || 120)}
-                                   style={{width: 80, marginLeft: 6}}/>
-                        </label>
-                        <label>Quantize:
-                            <select value={denom} onChange={e => setDenom(Number(e.target.value) as 4 | 8 | 16)}
-                                    style={{marginLeft: 6}}>
-                                <option value={4}>¼</option>
-                                <option value={8}>⅛</option>
-                                <option value={16}>¹⁶</option>
-                            </select>
-                        </label>
-                        <button type="button" onClick={() => {
-                            const {quantizeRaw} = require('@/utils/notes');
-                            onChange(quantizeRaw(rawNotes, bpm, denom));
-                        }}>Apply Quantize
-                        </button>
                         <button type="button" onClick={addRow}>+ Add</button>
                         <button type="button" onClick={() => {
                             const sorted = [...rawNotes].sort((a, b) => a.start - b.start);
@@ -90,20 +72,20 @@ export default function NotesEditor({
                     <option value="chord">chord</option>
                   </select>
                 </td>
-                <td>
-                  <input
-                    value={n.pitches.join(',')}
-                    onChange={e => {
-                      const nums = e.target.value
-                        .split(',')
-                        .map(s => s.trim())
-                        .filter(Boolean)
-                        .map(x => Math.max(0, Math.min(127, Number(x) || 0)));
-                      update(i, { pitches: nums.length ? nums : [60] });
-                    }}
-                    style={{ width: '100%' }}
-                  />
-                </td>
+                  <td>
+                      <input
+                          defaultValue={n.pitches.join(',')}
+                          onBlur={e => {
+                              const nums = e.target.value
+                                  .split(',')
+                                  .map(s => s.trim())
+                                  .filter(Boolean)
+                                  .map(x => Math.max(0, Math.min(127, Number(x) || 0)));
+                              update(i, { pitches: nums.length ? nums : [60] });
+                          }}
+                          style={{ width: '100%' }}
+                      />
+                  </td>
                 <td>
                   <input type="number" step="0.01" value={n.start}
                     onChange={e => update(i, { start: Math.max(0, Number(e.target.value) || 0) })}
