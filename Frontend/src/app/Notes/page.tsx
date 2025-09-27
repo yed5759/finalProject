@@ -387,7 +387,13 @@ export default function Notes() {
         playNext(currentIndex);
     };
 
-
+    const resetAllNoteColors = () => {
+        vexNoteRefs.forEach(n => {
+            if (!n) return;
+            n.setStyle({ fillStyle: "black", strokeStyle: "black" });
+            n.draw();
+        });
+    };
 
     const stopNotes = () => {
         if (!audioRef.current) return;
@@ -398,6 +404,7 @@ export default function Notes() {
 
         timeoutsRef.current.forEach(id => clearTimeout(id));
         timeoutsRef.current = [];
+        resetAllNoteColors();
         setIsPlaying(false);
         setCurrentIndex(0);
     };
