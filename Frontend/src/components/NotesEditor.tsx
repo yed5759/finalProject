@@ -46,7 +46,6 @@ export default function NotesEditor({
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             <button type="button" onClick={addRow}>+ Add</button>
             <button type="button" onClick={onApply} style={{ background: '#222', color: '#fff' }}>Save</button>
-            <button type="button" onClick={onClose}>Close</button>
           </div>
         </div>
 
