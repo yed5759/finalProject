@@ -53,8 +53,8 @@ export default function NotesEditor({
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th>#</th><th>Type</th><th>Pitches (comma MIDI)</th>
-              <th>Start (s)</th><th>Duration (s)</th><th>Vel</th><th></th>
+              <th>#</th><th>Type</th><th>Pitches (MIDI)</th>
+              <th>Start (s)</th><th>Duration (s)</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -90,11 +90,6 @@ export default function NotesEditor({
                   <input type="number" step="0.01" value={n.duration}
                     onChange={e => update(i, { duration: Math.max(0.01, Number(e.target.value) || 0.01) })}
                     style={{ width: 90 }} />
-                </td>
-                <td>
-                  <input type="number" step="0.01" min="0" max="1" value={n.velocity}
-                    onChange={e => update(i, { velocity: Math.max(0, Math.min(1, Number(e.target.value) || 0)) })}
-                    style={{ width: 70 }} />
                 </td>
                 <td>
                   <button type="button" onClick={() => removeRow(i)}>✕</button>
