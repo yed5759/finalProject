@@ -30,6 +30,7 @@ export default function Notes() {
     const [bpm, setBpm] = useState<number>(120);
     const [editOpen, setEditOpen] = useState(false);
     const [vexNoteRefs, setVexNoteRefs] = useState<StaveNote[]>([]);
+    const audioRef = useRef<{ ctx: AudioContext, oscs: OscillatorNode[] } | null>(null);
 
     useEffect(() => {
         if (!ownerId || !id) return;
@@ -296,6 +297,7 @@ export default function Notes() {
         if (!notes.length || !vexNoteRefs.length) return;
 
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillators: OscillatorNode[] = [];
         let currentTime = audioCtx.currentTime;
 
         notes.forEach((note, index) => {
@@ -304,9 +306,9 @@ export default function Notes() {
 
             vexNote.setStyle({ fillStyle: "red" });
             vexNote.draw();
+
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-
             osc.type = "sine";
             osc.frequency.value = noteToFrequency(note.keys[0].replace("/", ""));
             osc.connect(gain);
@@ -315,6 +317,7 @@ export default function Notes() {
             const dur = durationToSeconds(note.duration, bpm);
             osc.start(currentTime);
             osc.stop(currentTime + dur);
+            oscillators.push(osc);
 
             setTimeout(() => {
                 vexNote.setStyle({ fillStyle: "black" });
@@ -323,8 +326,19 @@ export default function Notes() {
 
             currentTime += dur;
         });
+        audioRef.current = { ctx: audioCtx, oscs: oscillators };
     };
 
+
+    useEffect(() => {
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.oscs.forEach(osc => osc.stop());
+                audioRef.current.ctx.close();
+                audioRef.current = null;
+            }
+        };
+    }, []);
 
     function noteToFrequency(note: string): number {
         // note is like "c4", "d#5", etc.
