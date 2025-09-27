@@ -5,6 +5,7 @@ import "../styles/globals.css";
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { AppWrapper } from "@/components/AppWrapper";
 import { AuthProvider } from "@/context/AuthContext";
+import {NavigationTracker} from "@/components/navigationTracker";
 import React from "react";
 
 export const metadata = {
@@ -19,6 +20,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="right-decoration" />
         <AuthProvider>
           <AppWrapper>
+            <NavigationTracker/>
             {children}
           </AppWrapper>
         </AuthProvider>
