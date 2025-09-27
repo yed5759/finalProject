@@ -44,23 +44,6 @@ export default function NotesEditor({
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
           <h3 style={{ margin: 0 }}>Edit Notes</h3>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <label>BPM:
-              <input type="number" value={bpm} min={20} max={300}
-                onChange={e => setBpm(Number(e.target.value) || 120)}
-                style={{ width: 80, marginLeft: 6 }} />
-            </label>
-            <label>Quantize:
-              <select value={denom} onChange={e => setDenom(Number(e.target.value) as 4 | 8 | 16)}
-                style={{ marginLeft: 6 }}>
-                <option value={4}>¼</option>
-                <option value={8}>⅛</option>
-                <option value={16}>¹⁶</option>
-              </select>
-            </label>
-            <button type="button" onClick={() => {
-              const { quantizeRaw } = require('@/utils/notes');
-              onChange(quantizeRaw(rawNotes, bpm, denom));
-            }}>Apply Quantize</button>
             <button type="button" onClick={addRow}>+ Add</button>
             <button type="button" onClick={onApply} style={{ background: '#222', color: '#fff' }}>Save</button>
             <button type="button" onClick={onClose}>Close</button>
