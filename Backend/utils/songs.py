@@ -47,10 +47,7 @@ def update_song_for_user(user_id, song_id, updated_data):
     if "title" not in updated_data or not updated_data["title"]:
         raise ValueError("Song title is required")
     # Convert missing optional fields to default values
-    updated_data.setdefault("artist", None)
-    updated_data.setdefault("tags", [])
-    updated_data.setdefault("notes", [])
-
+    
     update_query = {f"songs.$.{key}": value for key, value in updated_data.items()}
     result = db.users.update_one(
         {"_id": user_id, "songs.id": song_id},
