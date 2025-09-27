@@ -21,7 +21,7 @@ export default function Notes() {
     const searchParams = useSearchParams();
     const freshParam = searchParams.get('fresh'); // '1' | null
     const songName = searchParams.get("songName");
-    const id = searchParams.get("song_id") || null;
+    const songId = searchParams.get("song_id") || null;
     const titleKey = songName ? decodeURIComponent(songName) : "";
     const ownerId = searchParams.get("owner_id") || null;
     const router = useRouter();
@@ -29,14 +29,22 @@ export default function Notes() {
     const [bpm, setBpm] = useState<number>(120);
     const [editOpen, setEditOpen] = useState(false);
     const [vexNoteRefs, setVexNoteRefs] = useState<StaveNote[]>([]);
-    const audioRef = useRef<{ ctx: AudioContext, oscs: OscillatorNode[] } | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isStopped, setIsStopped] = useState(true);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const audioRef = useRef<{ ctx: AudioContext; oscs: OscillatorNode[]; playing: boolean } | null>(null);
+    const [pausedTime, setPausedTime] = useState(0);
+    const timeoutsRef = useRef<number[]>([]);
+
+
+    const [elapsedTime, setElapsedTime] = useState(0);
 
     useEffect(() => {
-        if (!ownerId || !id) return;
+        if (!ownerId || !songId) return;
 
         async function fetchSharedSong() {
             try {
-                const res = await fetch(`http://localhost:5000/songs/public/${ownerId}/${id}`);
+                const res = await fetch(`http://localhost:5000/songs/public/${ownerId}/${songId}`);
                 if (!res.ok) throw new Error("Song not found");
                 const data = await res.json();
 
@@ -59,7 +67,7 @@ export default function Notes() {
         }
 
         fetchSharedSong();
-    }, [ownerId, id]);
+    }, [ownerId, songId]);
 
     useEffect(() => {
         if (!titleKey) {
@@ -234,9 +242,9 @@ export default function Notes() {
             localStorage.setItem(`bpm-${songName}`, String(bpm));
         }
         setEditOpen(false);
-        if (id) {
+        if (songId) {
             try {
-                const res = await fetchWithRefresh(`http://localhost:5000/songs/${id}`, {
+                const res = await fetchWithRefresh(`http://localhost:5000/songs/${songId}`, {
                     method: "PATCH",
                     headers: {
                         "Content-Type": "application/json",
@@ -252,7 +260,6 @@ export default function Notes() {
             }
         }
     };
-
 
     const handleBack = () => {
         const stack = JSON.parse(sessionStorage.getItem("navStack") || "[]");
@@ -292,46 +299,114 @@ export default function Notes() {
         }
     }
 
-    const playNotes = () => {
-        if (!notes.length || !vexNoteRefs.length) return;
 
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const oscillators: OscillatorNode[] = [];
-        let currentTime = audioCtx.currentTime;
+    const playNext = (index: number) => {
+        if (!notes.length || !vexNoteRefs.length || !audioRef.current) return;
 
-        notes.forEach((note, index) => {
-            const vexNote = vexNoteRefs[index];
-            if (!vexNote) return;
+        if (index >= notes.length) {
+            // נגמרו התווים
+            setIsPlaying(false);
+            setIsStopped(true);
+            setCurrentIndex(0);
+            audioRef.current = null;
+            return;
+        }
 
-            vexNote.setStyle({ fillStyle: "red" });
-            vexNote.draw();
-            if (note.isRest) {
-                currentTime += durationToSeconds(note.duration, bpm);
-                return;
-            }
+        const ctx = audioRef.current.ctx;
+        const note = notes[index];
+        const vexNote = vexNoteRefs[index];
+        if (!vexNote) return;
 
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
+        // צבע אדום
+        vexNote.setStyle({ fillStyle: "red" });
+        vexNote.draw();
+
+        const dur = durationToSeconds(note.duration, bpm);
+
+        note.keys.forEach(k => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
             osc.type = "sine";
-            osc.frequency.value = noteToFrequency(note.keys[0].replace("/", ""));
+            osc.frequency.value = noteToFrequency(k.replace("/", ""));
             osc.connect(gain);
-            gain.connect(audioCtx.destination);
-
-            const dur = durationToSeconds(note.duration, bpm);
-            osc.start(currentTime);
-            osc.stop(currentTime + dur);
-            oscillators.push(osc);
-
-            setTimeout(() => {
-                vexNote.setStyle({ fillStyle: "black" });
-                vexNote.draw();
-            }, (currentTime - audioCtx.currentTime + dur) * 1000);
-
-            currentTime += dur;
+            gain.connect(ctx.destination);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + dur);
+            audioRef.current?.oscs.push(osc);
         });
-        audioRef.current = { ctx: audioCtx, oscs: oscillators };
+
+        // זמן עד לעדכון הבא
+        const timeoutId = window.setTimeout(() => {
+            vexNote.setStyle({ fillStyle: "black" });
+            vexNote.draw();
+            setCurrentIndex(idx => idx + 1);
+            audioRef.current?.oscs.splice(0); // נקי את האוסילטורים שהסתיימו
+            if (audioRef.current?.playing) {
+                playNext(index + 1);
+            }
+        }, dur * 1000);
+
+        timeoutsRef.current.push(timeoutId);
     };
 
+
+    const playNotes = () => {
+        if (!audioRef.current) {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            audioRef.current = { ctx, oscs: [], playing: true };
+        } else {
+            audioRef.current.playing = true;
+        }
+        setIsPlaying(true);
+        setIsStopped(false);
+        playNext(currentIndex);
+    };
+
+
+
+    const pauseNotes = () => {
+        if (!audioRef.current) return;
+
+        audioRef.current.oscs.forEach(osc => osc.stop());
+        audioRef.current.oscs = [];
+        audioRef.current.playing = false;
+
+        // נקה את כל ה־timeouts
+        timeoutsRef.current.forEach(id => clearTimeout(id));
+        timeoutsRef.current = [];
+
+        setIsPlaying(false);
+    };
+
+    const continueNotes = () => {
+        if (!audioRef.current) return;
+        audioRef.current.playing = true;
+        setIsPlaying(true);
+        playNext(currentIndex);
+    };
+
+    const resetAllNoteColors = () => {
+        vexNoteRefs.forEach(n => {
+            if (!n) return;
+            n.setStyle({ fillStyle: "black", strokeStyle: "black" });
+            n.draw();
+        });
+    };
+
+    const stopNotes = () => {
+        if (!audioRef.current) return;
+
+        audioRef.current.oscs.forEach(osc => osc.stop());
+        audioRef.current.oscs = [];
+        audioRef.current.playing = false;
+
+        timeoutsRef.current.forEach(id => clearTimeout(id));
+        timeoutsRef.current = [];
+        resetAllNoteColors();
+        setIsPlaying(false);
+        setCurrentIndex(0);
+    };
 
     useEffect(() => {
         return () => {
@@ -387,7 +462,7 @@ export default function Notes() {
 
             <div className="d-flex gap-3 mt-3">
                 <button type="button" className="btn" style={{ width: '10pc', background: "#d59efb" }}
-                    data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save Notes
+                    data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save New Song
                 </button>
                 <button className="btn" style=
                     {{
@@ -395,13 +470,24 @@ export default function Notes() {
                         background: "#5ac9d6"
                     }}
                     onClick={openEditor}>Edit Notes</button>
-                <button
-                    className="btn"
-                    style={{ width: '10pc', background: "#90ee90" }}
-                    onClick={playNotes}
-                >
-                    ▶ Play
-                </button>
+
+
+                <div className="d-flex gap-2">
+                    {!isPlaying && currentIndex === 0 && (
+                        <button className="btn btn-success" onClick={playNotes}>▶ Play</button>
+                    )}
+                    {isPlaying && (
+                        <button className="btn btn-warning" onClick={pauseNotes}>❚❚ Pause</button>
+                    )}
+                    {!isPlaying && currentIndex > 0 && (
+                        <button className="btn btn-success" onClick={continueNotes}>▶ Continue</button>
+                    )}
+                    {(isPlaying || currentIndex > 0) && (
+                        <button className="btn btn-danger" onClick={stopNotes}>■ Stop</button>
+                    )}
+                </div>
+
+
                 <DownloadDropdown vfRef={vfRef as React.RefObject<HTMLDivElement>} notes={notes} />
             </div>
             <div

@@ -15,23 +15,23 @@ type Props = {
 
 // @ts-ignore
 export default function NotesEditor({
-                                        open, onClose, bpm, setBpm, rawNotes, onChange, onApply
-                                    }: Props) {
-    const [denom, setDenom] = useState<4 | 8 | 16>(8);
+  open, onClose, bpm, setBpm, rawNotes, onChange, onApply
+}: Props) {
+  const [denom, setDenom] = useState<4 | 8 | 16>(8);
 
-    if (!open) return null;
+  if (!open) return null;
 
-    const update = (idx: number, patch: Partial<RawNote>) => {
-        const next = rawNotes.slice();
-        next[idx] = {...next[idx], ...patch};
-        onChange(next);
-    };
+  const update = (idx: number, patch: Partial<RawNote>) => {
+    const next = rawNotes.slice();
+    next[idx] = { ...next[idx], ...patch };
+    onChange(next);
+  };
 
-    const addRow = () => onChange([...rawNotes, {
-        type: 'note', pitches: [60], start: 0, duration: 0.5, velocity: 0.7
-    }]);
+  const addRow = () => onChange([...rawNotes, {
+    type: 'note', pitches: [60], start: 0, duration: 0.5, velocity: 0.7
+  }]);
 
-    const removeRow = (i: number) => onChange(rawNotes.filter((_, idx) => idx !== i));
+  const removeRow = (i: number) => onChange(rawNotes.filter((_, idx) => idx !== i));
 
     return (
         <div style={{
