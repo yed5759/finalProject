@@ -73,65 +73,55 @@ export default function NotesEditor({
                     </div>
                 </div>
 
-                <table style={{width: '100%', borderCollapse: 'collapse'}}>
-                    <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Type</th>
-                        <th>Pitches (comma MIDI)</th>
-                        <th>Start (s)</th>
-                        <th>Duration (s)</th>
-                        <th>Vel</th>
-                        <th></th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {rawNotes.map((n, i) => (
-                        <tr key={i}>
-                            <td>{i + 1}</td>
-                            <td>
-                                <select value={n.type} onChange={e => update(i, {type: e.target.value as any})}>
-                                    <option value="note">note</option>
-                                    <option value="chord">chord</option>
-                                </select>
-                            </td>
-                            <td>
-                                <input
-                                    defaultValue={n.pitches.join(',')}
-                                    onBlur={e => {
-                                        const nums = e.target.value
-                                            .split(',')
-                                            .map(s => s.trim())
-                                            .filter(Boolean)
-                                            .map(x => Math.max(0, Math.min(127, Number(x) || 0)));
-                                        update(i, { pitches: nums.length ? nums : [60] });
-                                    }}
-                                    style={{ width: '100%' }}
-                                />
-                            </td>
-                            <td>
-                                <input type="number" step="0.01" value={n.start}
-                                       onChange={e => update(i, {start: Math.max(0, Number(e.target.value) || 0)})}
-                                       style={{width: 90}}/>
-                            </td>
-                            <td>
-                                <input type="number" step="0.01" value={n.duration}
-                                       onChange={e => update(i, {duration: Math.max(0.01, Number(e.target.value) || 0.01)})}
-                                       style={{width: 90}}/>
-                            </td>
-                            <td>
-                                <input type="number" step="0.01" min="0" max="1" value={n.velocity}
-                                       onChange={e => update(i, {velocity: Math.max(0, Math.min(1, Number(e.target.value) || 0))})}
-                                       style={{width: 70}}/>
-                            </td>
-                            <td>
-                                <button type="button" onClick={() => removeRow(i)}>✕</button>
-                            </td>
-                        </tr>
-                    ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th>#</th><th>Type</th><th>Pitches (MIDI)</th>
+              <th>Start (s)</th><th>Duration (s)</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rawNotes.map((n, i) => (
+              <tr key={i}>
+                <td>{i + 1}</td>
+                <td>
+                  <select value={n.type} onChange={e => update(i, { type: e.target.value as any })}>
+                    <option value="note">note</option>
+                    <option value="chord">chord</option>
+                  </select>
+                </td>
+                <td>
+                  <input
+                    value={n.pitches.join(',')}
+                    onChange={e => {
+                      const nums = e.target.value
+                        .split(',')
+                        .map(s => s.trim())
+                        .filter(Boolean)
+                        .map(x => Math.max(0, Math.min(127, Number(x) || 0)));
+                      update(i, { pitches: nums.length ? nums : [60] });
+                    }}
+                    style={{ width: '100%' }}
+                  />
+                </td>
+                <td>
+                  <input type="number" step="0.01" value={n.start}
+                    onChange={e => update(i, { start: Math.max(0, Number(e.target.value) || 0) })}
+                    style={{ width: 90 }} />
+                </td>
+                <td>
+                  <input type="number" step="0.01" value={n.duration}
+                    onChange={e => update(i, { duration: Math.max(0.01, Number(e.target.value) || 0.01) })}
+                    style={{ width: 90 }} />
+                </td>
+                <td>
+                  <button type="button" onClick={() => removeRow(i)}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
