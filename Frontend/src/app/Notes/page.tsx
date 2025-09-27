@@ -13,11 +13,10 @@ import { rawToVexflow, type RawNote, type VexNote } from '../../utils/notes';
 import { buildRawFromVex } from '../../utils/notes';
 import { fetchWithRefresh } from '@/utils/cognito';
 
-
 export default function Notes() {
     const vfRef = useRef<HTMLDivElement>(null);
 
-    const [notes, setNotes] = useState<{ keys: string[]; duration: string }[]>([]);
+    const [notes, setNotes] = useState<VexNote[]>([]);
 
     const searchParams = useSearchParams();
     const freshParam = searchParams.get('fresh'); // '1' | null
@@ -125,7 +124,7 @@ export default function Notes() {
 
                 return new StaveNote({
                     keys: note.keys,
-                    duration: duration,
+                    duration: duration + (note.isRest? "r" : ""),
                 });
             } catch (e) {
                 console.warn("Invalid note skipped:", note, e);
@@ -153,7 +152,7 @@ export default function Notes() {
         const BOTTOM_BUFFER = 40;
 
         const height = systems.length * STAVE_HEIGHT + TOP_MARGIN + BOTTOM_BUFFER;
-        renderer.resize(1400, height);
+        renderer.resize(1300, height);
 
         let y = -20;
 
@@ -306,6 +305,10 @@ export default function Notes() {
 
             vexNote.setStyle({ fillStyle: "red" });
             vexNote.draw();
+            if (note.isRest) {
+                currentTime += durationToSeconds(note.duration, bpm);
+                return;
+            }
 
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
@@ -402,14 +405,10 @@ export default function Notes() {
                 <DownloadDropdown vfRef={vfRef as React.RefObject<HTMLDivElement>} notes={notes} />
             </div>
             <div
-                className="w-100 mt-4"
                 style={{
-                    flexGrow: 1,
-                    overflowY: 'auto',
-                    maxHeight: 'calc(100vh - 600px)',
-                    padding: '0',
-                    scrollbarWidth: 'none', // Firefox
-                    msOverflowStyle: 'none'
+                    maxHeight: "60vh",
+                    overflowY: "auto",
+                    overflowX: "hidden",
                 }}>
                 <div ref={vfRef} style={{ width: '100%' }} />
             </div>
