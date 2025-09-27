@@ -463,7 +463,7 @@ export default function Notes() {
 
             <div className="d-flex gap-3 mt-3">
                 <button type="button" className="btn" style={{ width: '10pc', background: "#d59efb" }}
-                    data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save Notes
+                    data-bs-toggle="modal" data-bs-target="#staticBackdrop">Save New Song
                 </button>
                 <button className="btn" style=
                     {{
