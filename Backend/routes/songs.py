@@ -6,8 +6,6 @@ from utils.songs import (
     get_songs_for_user, add_song_to_user,
     delete_song_from_user, update_song_for_user,
     get_song_by_id
-    # todo delete
-    , add_const_song
 )
 
 songs_routes = Blueprint("songs", __name__)
@@ -81,13 +79,3 @@ def get_song_public(owner_id, song_id):
         return jsonify(song), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# todo delete - POST /songs/add-const
-@songs_routes.route("/songs/add-const", methods=["POST"])
-def add_const():
-    print("add_const called!")
-    user, error = get_user_from_request()
-    if error:
-        return jsonify({"error": error}), 401
-    song = add_const_song(user["_id"])
-    return jsonify({"message": "Dummy song added", "song": song})
