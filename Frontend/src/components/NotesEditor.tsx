@@ -97,16 +97,16 @@ export default function NotesEditor({
                             </td>
                             <td>
                                 <input
-                                    value={n.pitches.join(',')}
-                                    onChange={e => {
+                                    defaultValue={n.pitches.join(',')}
+                                    onBlur={e => {
                                         const nums = e.target.value
                                             .split(',')
                                             .map(s => s.trim())
                                             .filter(Boolean)
                                             .map(x => Math.max(0, Math.min(127, Number(x) || 0)));
-                                        update(i, {pitches: nums.length ? nums : [60]});
+                                        update(i, { pitches: nums.length ? nums : [60] });
                                     }}
-                                    style={{width: '100%'}}
+                                    style={{ width: '100%' }}
                                 />
                             </td>
                             <td>
