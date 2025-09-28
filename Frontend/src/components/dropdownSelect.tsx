@@ -17,7 +17,7 @@ export default function DownloadDropdown({ vfRef, notes }: Props) {
 
     const handleDownload = () => {
         if (selected === "(None)") {
-            alert("type is None");
+            alert("First select a format to download.");
         } else if (selected === "pdf") {
             void downloadPDF();
         } else {
