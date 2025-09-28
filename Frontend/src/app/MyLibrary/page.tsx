@@ -26,6 +26,7 @@ export default function MyLibrary() {
     const [editingSongId, setEditingSongId] = useState<string | null>(null);
     const [editingValues, setEditingValues] = useState<{ title: string; artist?: string; tags?: string[]; newTag?: string }>({ title: '', artist: '', tags: [], newTag: '' });
     const router = useRouter();
+    const [toast, setToast] = useState<{ msg: string, x: number, y: number } | null>(null);
 
     // Filter songs based on search query
     const query = searchQuery.toLowerCase();
@@ -99,7 +100,6 @@ export default function MyLibrary() {
 
             const data: { _id?: string | null } = await res.json();
             const userId = data._id;
-
             if (!userId) {
                 alert("User ID not found");
                 return;
@@ -110,7 +110,10 @@ export default function MyLibrary() {
 
             // Copy to clipboard
             await navigator.clipboard.writeText(shareUrl);
-            alert("📋 הקישור הועתק ללוח:\n" + shareUrl);
+
+            // הצגת ההודעה הזמנית
+            setToast({ msg: "Copied to clipboard!", x: e.clientX, y: e.clientY });
+            setTimeout(() => setToast(null), 2000);
 
         } catch (error: any) {
             alert("Failed to generate share link: " + (error?.message || ""));
@@ -356,6 +359,23 @@ export default function MyLibrary() {
                     ))}
                 </div>
             </div>
+            {toast && (
+                <div style={{
+                    position: "fixed",
+                    top: toast.y - 40, // מעט מעל הכפתור
+                    left: toast.x,
+                    transform: "translateX(-50%)",
+                    backgroundColor: "#333",
+                    color: "#fff",
+                    padding: "6px 10px",
+                    borderRadius: "4px",
+                    opacity: 0.9,
+                    pointerEvents: "none",
+                    zIndex: 1000,
+                }}>
+                    {toast.msg}
+                </div>
+            )}
         </div>
     );
 }
