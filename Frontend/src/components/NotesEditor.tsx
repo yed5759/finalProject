@@ -2,6 +2,7 @@
 'use client';
 import { useState } from 'react';
 import type { RawNote } from '@/utils/notes';
+import { v4 as uuidv4 } from 'uuid';
 
 type Props = {
   open: boolean;
@@ -27,9 +28,16 @@ export default function NotesEditor({
     onChange(next);
   };
 
-  const addRow = () => onChange([...rawNotes, {
-    type: 'note', pitches: [60], start: 0, duration: 0.5, velocity: 0.7
-  }]);
+  const addRow = () => onChange([
+    ...rawNotes,
+    {
+      id: uuidv4(),
+      type: 'note',
+      pitches: [60],
+      start: 0,
+      duration: 0.5,
+      velocity: 0.7
+    }]);
 
   const removeRow = (id: string) => onChange(rawNotes.filter(n => n.id !== id));
   return (
