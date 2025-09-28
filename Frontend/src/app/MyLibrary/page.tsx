@@ -97,7 +97,7 @@ export default function MyLibrary() {
                 return;
             }
 
-            const data = await res.json();
+            const data: { _id?: string | null } = await res.json();
             const userId = data._id;
 
             if (!userId) {
@@ -106,7 +106,7 @@ export default function MyLibrary() {
             }
 
             // Build public share URL
-            const shareUrl = `${window.location.origin}/Notes?owner_id=${userId}&song_id=${song.id}`;
+            const shareUrl = `${window.location.origin}/Notes?owner_id=${userId}&song_id=${song.id}&songName=${encodeURIComponent(song.title)}`;
 
             // Copy to clipboard
             await navigator.clipboard.writeText(shareUrl);
