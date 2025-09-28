@@ -327,7 +327,6 @@ export default function MyLibrary() {
                                     title="Delete">
                                     <MdDelete></MdDelete>
                                 </button>
-                                {/* todo delete */}
                                 {/* Share icon button */}
                                 <button
                                     onClick={(e) => handleShare(song, e)}

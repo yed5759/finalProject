@@ -32,6 +32,3 @@ def download_audio(url):
 
     except Exception as e:
         print(f"Error downloading audio: {e}")
-
-
-
