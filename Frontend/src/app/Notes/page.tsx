@@ -30,14 +30,9 @@ export default function Notes() {
     const [editOpen, setEditOpen] = useState(false);
     const [vexNoteRefs, setVexNoteRefs] = useState<StaveNote[]>([]);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [isStopped, setIsStopped] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const audioRef = useRef<{ ctx: AudioContext; oscs: OscillatorNode[]; playing: boolean } | null>(null);
-    const [pausedTime, setPausedTime] = useState(0);
     const timeoutsRef = useRef<number[]>([]);
-
-
-    const [elapsedTime, setElapsedTime] = useState(0);
 
     useEffect(() => {
         if (!ownerId || !songId) return;
@@ -132,7 +127,7 @@ export default function Notes() {
 
                 return new StaveNote({
                     keys: note.keys,
-                    duration: duration + (note.isRest? "r" : ""),
+                    duration: duration + (note.isRest ? "r" : ""),
                 });
             } catch (e) {
                 console.warn("Invalid note skipped:", note, e);
@@ -306,7 +301,6 @@ export default function Notes() {
         if (index >= notes.length) {
             // נגמרו התווים
             setIsPlaying(false);
-            setIsStopped(true);
             setCurrentIndex(0);
             audioRef.current = null;
             return;
@@ -359,7 +353,6 @@ export default function Notes() {
             audioRef.current.playing = true;
         }
         setIsPlaying(true);
-        setIsStopped(false);
         playNext(currentIndex);
     };
 
