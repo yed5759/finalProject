@@ -1,5 +1,6 @@
 // src/utils/notes.ts
 export type RawNote = {
+    id: string;            // unique identifier
     type: 'note' | 'chord' | 'rest';
     pitches: number[];     // MIDI
     start: number;         // seconds
@@ -52,6 +53,7 @@ export function buildRawFromVex(vex: VexNote[], bpm: number): RawNote[] {
         const dur = beats * beat;
         const pitches = v.isRest ? [] : v.keys.map(vexKeyToMidi);
         const row: RawNote = {
+            id: crypto.randomUUID(),
             type: v.isRest
                 ? 'rest'
                 : pitches.length > 1 ? 'chord' : 'note',
@@ -102,15 +104,6 @@ export function rawToVexflow(raw: RawNote[], bpm: number): VexNote[] {
     let prevEnd = 0;
 
     for (const n of raw.sort((a, b) => a.start - b.start)) {
-        const gap = n.start - prevEnd;
-        if (gap > 1e-3) {
-            out.push({
-                keys: ['b/4'],          // Rest dummy key
-                duration: secondsToDuration(gap, bpm),
-                isRest: true
-            });
-        }
-
         out.push({
             keys: n.pitches.map(midiToVexKey),
             duration: secondsToDuration(n.duration, bpm),
