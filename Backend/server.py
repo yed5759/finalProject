@@ -4,7 +4,6 @@ from flask_cors import CORS
 from routes.auth import auth_routes
 from routes.user import user_routes
 from routes.songs import songs_routes
-from routes.sharing import sharing_routes
 from routes.model import home_routes
 
 app = Flask(__name__)
@@ -15,7 +14,6 @@ CORS(app, origins = "http://localhost:3000", supports_credentials=True)
 # Register auth routes
 app.register_blueprint(auth_routes)
 app.register_blueprint(songs_routes)
-app.register_blueprint(sharing_routes)
 app.register_blueprint(home_routes)
 app.register_blueprint(user_routes, url_prefix="/user")
 
