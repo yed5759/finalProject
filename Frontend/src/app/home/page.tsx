@@ -36,7 +36,7 @@ export default function HomePage() {
       formData.append("file", file);
     } else if (url) {
       try {
-        new URL(url); // בדיקה אם זה URL תקין
+        new URL(url); // URL validity test
         formData.append("url", url);
       } catch {
         alert("Please enter a valid URL!");

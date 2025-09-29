@@ -32,7 +32,7 @@ def get_me():
     users_collection = db["users"]
     mongo_user = users_collection.find_one({"_id": user["_id"]})
     if mongo_user is None:
-        # המשתמש לא קיים – נחזיר מבנה ריק עם מידע מה-token בלבד
+        # User doesn't exist, return data only from token
         return jsonify({
             "_id": user["_id"],
             "username": user.get("username", ""),

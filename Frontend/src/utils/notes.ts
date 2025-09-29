@@ -36,7 +36,7 @@ const durationToBeatsVex = (d: string) => {
                     base === "8" ? 0.5 :
                         base === "16" ? 0.25 :
                             base === "32" ? 0.125 :
-                                1; // ברירת מחדל רבע
+                                1; // default quarter
 
     if (dotted) {
         beats *= 1.5;
@@ -71,7 +71,7 @@ export function secondsToDuration(sec: number, bpm: number): string {
     const beatSec = 60 / bpm;
     const beats = sec / beatSec;
 
-    // טבלה בסיסית + גרסאות מנוקדות (1.5 ×)
+    // Basic chart + dotted versions (1.5 ×)
     const base: [number, string][] = [
         [4, 'w'],
         [2, 'h'],
@@ -83,11 +83,11 @@ export function secondsToDuration(sec: number, bpm: number): string {
 
     const table: [number, string][] = [];
     for (const [val, name] of base) {
-        table.push([val, name]);             // רגיל
-        table.push([val * 1.5, name + 'd']); // מנוקד
+        table.push([val, name]);             // basic
+        table.push([val * 1.5, name + 'd']); // dotted
     }
 
-    // בוחרים את הערך הכי קרוב
+    // Choosing the closest value
     let best = 'q', errMin = Infinity;
     for (const [val, name] of table) {
         const e = Math.abs(beats - val);

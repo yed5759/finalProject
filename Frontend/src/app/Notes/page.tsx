@@ -174,7 +174,7 @@ export default function Notes() {
             const stave = new Stave(10, y, 1400);
             stave.addClef('treble').addTimeSignature('4/4').setContext(ctx).draw();
 
-            // מאחדים את כל התווים מהתיבות
+            // Unify all notes
             const notesInSystem = system.flat();
 
             if (notesInSystem.length > 0) {
@@ -233,7 +233,7 @@ export default function Notes() {
             case "q": return 1;     // quarter note
             case "8": return 0.5;   // eighth note
             case "16": return 0.25; // sixteenth note
-            default: return 1;      // ברירת מחדל לרבע
+            default: return 1;      // default to quarter
         }
     }
 
@@ -308,7 +308,7 @@ export default function Notes() {
         if (!notes.length || !vexNoteRefs.length || !audioRef.current) return;
 
         if (index >= notes.length) {
-            // נגמרו התווים
+            // Notes are finished
             setIsPlaying(false);
             setCurrentIndex(0);
             audioRef.current = null;
@@ -319,7 +319,7 @@ export default function Notes() {
         const vexNote = vexNoteRefs[index];
         if (!vexNote) return;
 
-        // צבע אדום
+        // Color it red
         vexNote.setStyle({ fillStyle: "red" });
         vexNote.draw();
 
@@ -327,19 +327,19 @@ export default function Notes() {
 
         if (piano && acRef.current) {
             note.keys.forEach(k => {
-                // המרת "c/4" → "C4"
+                // Convert "c/4" → "C4"
                 const midiKey = k.replace("/", "").toUpperCase();
                 // @ts-ignore
                 piano.play(midiKey, acRef.current.currentTime, { duration: dur });
             });
         }
 
-        // זמן עד לעדכון הבא
+        // Time till next update
         const timeoutId = window.setTimeout(() => {
             vexNote.setStyle({ fillStyle: "black" });
             vexNote.draw();
             setCurrentIndex(idx => idx + 1);
-            audioRef.current?.oscs.splice(0); // נקי את האוסילטורים שהסתיימו
+            audioRef.current?.oscs.splice(0); // Clean the oscillators that are done
             if (audioRef.current?.playing) {
                 playNext(index + 1);
             }
@@ -369,7 +369,7 @@ export default function Notes() {
         audioRef.current.oscs = [];
         audioRef.current.playing = false;
 
-        // נקה את כל ה־timeouts
+        // Clean all timeouts
         timeoutsRef.current.forEach(id => clearTimeout(id));
         timeoutsRef.current = [];
 
