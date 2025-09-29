@@ -49,7 +49,7 @@ export default function DownloadDropdown({ vfRef, notes }: Props) {
         const track = midi.addTrack();
 
         const bpm = 120;
-        const quarterNote = 60 / bpm; // שניות לרבע
+        const quarterNote = 60 / bpm; // Seconds per quarter
         let currentTime = 0;
 
         notes.forEach((note) => {

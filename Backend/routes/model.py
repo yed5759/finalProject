@@ -38,7 +38,7 @@ def create_notes():
     else:
         content = request.files.get('file')
         title = secure_filename(content.filename)
-        base_dir = os.path.dirname(os.path.dirname(__file__))  # עולה תיקייה מעל Backend/routes
+        base_dir = os.path.dirname(os.path.dirname(__file__))
         save_dir = os.path.join(base_dir, "temp")
         os.makedirs(save_dir, exist_ok=True)
 

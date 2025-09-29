@@ -52,7 +52,7 @@ export default function MyLibrary() {
                 router.push(`/Notes?songName=${name}&song_id=${id}`);
             } else if (res.status === 404) {
                 alert("השיר לא נמצא – כנראה נמחק");
-                setSongs(prev => prev.filter(song => song.id !== id)); // עדכון ה־state
+                setSongs(prev => prev.filter(song => song.id !== id)); // state update
             } else {
                 throw new Error(`Unexpected response: ${res.status}`);
             }
@@ -111,7 +111,7 @@ export default function MyLibrary() {
             // Copy to clipboard
             await navigator.clipboard.writeText(shareUrl);
 
-            // הצגת ההודעה הזמנית
+            // Show temporary message
             setToast({ msg: "Copied to clipboard!", x: e.clientX, y: e.clientY });
             setTimeout(() => setToast(null), 2000);
 
@@ -182,7 +182,7 @@ export default function MyLibrary() {
         }
     };
 
-    // ✅ הפונקציה לשליפת שירים (חשוב שתהיה נפרדת כדי שנוכל לקרוא לה מאירועים)
+    // ✅ The function to fetch songs (important to call at events)
     const fetchSongs = async () => {
         try {
 
@@ -360,7 +360,7 @@ export default function MyLibrary() {
             {toast && (
                 <div style={{
                     position: "fixed",
-                    top: toast.y - 40, // מעט מעל הכפתור
+                    top: toast.y - 40, // A tad above the button
                     left: toast.x,
                     transform: "translateX(-50%)",
                     backgroundColor: "#333",
