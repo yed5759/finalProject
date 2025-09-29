@@ -3,6 +3,7 @@
 'use client';
 
 import { Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow';
+import Soundfont from "soundfont-player";
 import '../../styles/Notes.css'
 import CustomModal from '../../components/modal'
 import { useEffect, useRef, useState } from "react";
@@ -33,6 +34,14 @@ export default function Notes() {
     const [currentIndex, setCurrentIndex] = useState(0);
     const audioRef = useRef<{ ctx: AudioContext; oscs: OscillatorNode[]; playing: boolean } | null>(null);
     const timeoutsRef = useRef<number[]>([]);
+    const [piano, setPiano] = useState<any>(null);
+    const acRef = useRef<AudioContext | null>(null);
+
+    useEffect(() => {
+        acRef.current = new AudioContext();
+        Soundfont.instrument(acRef.current, "acoustic_grand_piano").then(setPiano);
+    }, []);
+
 
     useEffect(() => {
         if (!ownerId || !songId) return;
@@ -306,7 +315,6 @@ export default function Notes() {
             return;
         }
 
-        const ctx = audioRef.current.ctx;
         const note = notes[index];
         const vexNote = vexNoteRefs[index];
         if (!vexNote) return;
@@ -317,18 +325,14 @@ export default function Notes() {
 
         const dur = durationToSeconds(note.duration, bpm);
 
-        note.keys.forEach(k => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = "sine";
-            osc.frequency.value = noteToFrequency(k.replace("/", ""));
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            gain.gain.setValueAtTime(0.3, ctx.currentTime);
-            osc.start(ctx.currentTime);
-            osc.stop(ctx.currentTime + dur);
-            audioRef.current?.oscs.push(osc);
-        });
+        if (piano && acRef.current) {
+            note.keys.forEach(k => {
+                // המרת "c/4" → "C4"
+                const midiKey = k.replace("/", "").toUpperCase();
+                // @ts-ignore
+                piano.play(midiKey, acRef.current.currentTime, { duration: dur });
+            });
+        }
 
         // זמן עד לעדכון הבא
         const timeoutId = window.setTimeout(() => {
